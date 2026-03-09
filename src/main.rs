@@ -2,7 +2,9 @@ mod app;
 mod browser;
 mod chrome;
 mod config;
+mod input;
 mod ipc;
+mod render;
 mod webview;
 
 use clap::Parser;

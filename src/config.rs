@@ -30,6 +30,18 @@ pub struct NamimadoConfig {
     /// Privacy configuration.
     #[serde(default)]
     pub privacy: PrivacyConfig,
+
+    /// Sidebar configuration.
+    #[serde(default)]
+    pub sidebar: SidebarConfig,
+
+    /// Download configuration.
+    #[serde(default)]
+    pub downloads: DownloadConfig,
+
+    /// Permissions configuration.
+    #[serde(default)]
+    pub permissions: PermissionsConfig,
 }
 
 /// Theme configuration for the browser chrome.
@@ -80,6 +92,71 @@ pub struct PrivacyConfig {
     pub https_only: bool,
 }
 
+/// Sidebar configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SidebarConfig {
+    /// Whether the sidebar is visible by default.
+    #[serde(default)]
+    pub visible: bool,
+
+    /// Which side the sidebar appears on.
+    #[serde(default = "default_sidebar_position")]
+    pub position: SidebarPosition,
+
+    /// Width of the sidebar in pixels.
+    #[serde(default = "default_sidebar_width")]
+    pub width: u32,
+}
+
+/// Which side the sidebar is displayed on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SidebarPosition {
+    Left,
+    Right,
+}
+
+/// Download configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadConfig {
+    /// Default download directory.
+    #[serde(default = "default_download_dir")]
+    pub directory: String,
+
+    /// Whether to ask the user where to save each download.
+    #[serde(default)]
+    pub ask_location: bool,
+}
+
+/// Permission policy for a capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PermissionPolicy {
+    Allow,
+    Deny,
+    Ask,
+}
+
+/// Permissions configuration for web capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionsConfig {
+    /// Geolocation access policy.
+    #[serde(default = "default_ask")]
+    pub geolocation: PermissionPolicy,
+
+    /// Notification permission policy.
+    #[serde(default = "default_ask")]
+    pub notifications: PermissionPolicy,
+
+    /// Camera access policy.
+    #[serde(default = "default_deny")]
+    pub camera: PermissionPolicy,
+
+    /// Microphone access policy.
+    #[serde(default = "default_deny")]
+    pub microphone: PermissionPolicy,
+}
+
 impl NamimadoConfig {
     /// Load configuration.
     ///
@@ -121,6 +198,13 @@ impl NamimadoConfig {
             }
         }
     }
+
+    /// Build the search URL for a query using the configured search engine.
+    #[must_use]
+    pub fn search_url(&self, query: &str) -> String {
+        let encoded = urlencoding::encode(query);
+        self.search_engine.replace("%s", &encoded)
+    }
 }
 
 impl Default for NamimadoConfig {
@@ -132,6 +216,9 @@ impl Default for NamimadoConfig {
             theme: ThemeConfig::default(),
             content_blocking: ContentBlockingConfig::default(),
             privacy: PrivacyConfig::default(),
+            sidebar: SidebarConfig::default(),
+            downloads: DownloadConfig::default(),
+            permissions: PermissionsConfig::default(),
         }
     }
 }
@@ -166,6 +253,36 @@ impl Default for PrivacyConfig {
     }
 }
 
+impl Default for SidebarConfig {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            position: default_sidebar_position(),
+            width: default_sidebar_width(),
+        }
+    }
+}
+
+impl Default for DownloadConfig {
+    fn default() -> Self {
+        Self {
+            directory: default_download_dir(),
+            ask_location: false,
+        }
+    }
+}
+
+impl Default for PermissionsConfig {
+    fn default() -> Self {
+        Self {
+            geolocation: default_ask(),
+            notifications: default_ask(),
+            camera: default_deny(),
+            microphone: default_deny(),
+        }
+    }
+}
+
 fn default_homepage() -> String {
     "about:blank".to_owned()
 }
@@ -184,6 +301,28 @@ const fn default_font_size() -> f32 {
 
 const fn default_opacity() -> f32 {
     1.0
+}
+
+const fn default_sidebar_position() -> SidebarPosition {
+    SidebarPosition::Left
+}
+
+const fn default_sidebar_width() -> u32 {
+    300
+}
+
+fn default_download_dir() -> String {
+    std::env::var("HOME")
+        .map(|h| format!("{h}/Downloads"))
+        .unwrap_or_else(|_| "~/Downloads".to_owned())
+}
+
+const fn default_ask() -> PermissionPolicy {
+    PermissionPolicy::Ask
+}
+
+const fn default_deny() -> PermissionPolicy {
+    PermissionPolicy::Deny
 }
 
 #[cfg(test)]
@@ -206,5 +345,53 @@ mod tests {
         let deserialized: NamimadoConfig = serde_yaml::from_str(&yaml).unwrap();
         assert_eq!(deserialized.homepage, config.homepage);
         assert_eq!(deserialized.theme.dark, config.theme.dark);
+    }
+
+    #[test]
+    fn sidebar_config_defaults() {
+        let config = SidebarConfig::default();
+        assert!(!config.visible);
+        assert_eq!(config.position, SidebarPosition::Left);
+        assert_eq!(config.width, 300);
+    }
+
+    #[test]
+    fn download_config_defaults() {
+        let config = DownloadConfig::default();
+        assert!(!config.ask_location);
+        assert!(config.directory.contains("Downloads"));
+    }
+
+    #[test]
+    fn permissions_config_defaults() {
+        let config = PermissionsConfig::default();
+        assert_eq!(config.geolocation, PermissionPolicy::Ask);
+        assert_eq!(config.camera, PermissionPolicy::Deny);
+    }
+
+    #[test]
+    fn search_url_encoding() {
+        let config = NamimadoConfig::default();
+        let url = config.search_url("rust programming");
+        assert!(url.contains("google.com"));
+        assert!(url.contains("rust"));
+    }
+
+    #[test]
+    fn sidebar_position_serde() {
+        let yaml = "\"left\"";
+        let pos: SidebarPosition = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(pos, SidebarPosition::Left);
+
+        let yaml = "\"right\"";
+        let pos: SidebarPosition = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(pos, SidebarPosition::Right);
+    }
+
+    #[test]
+    fn permission_policy_serde() {
+        let yaml = "\"ask\"";
+        let policy: PermissionPolicy = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(policy, PermissionPolicy::Ask);
     }
 }

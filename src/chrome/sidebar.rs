@@ -1,4 +1,6 @@
-use url::Url;
+use crate::browser::bookmark::{Bookmark, BookmarkManager};
+use crate::browser::download::DownloadManager;
+use crate::browser::history::HistoryManager;
 
 /// Which panel the sidebar is showing, if visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8,57 +10,11 @@ pub enum SidebarPanel {
     Downloads,
 }
 
-/// A single bookmark entry.
-#[derive(Debug, Clone)]
-pub struct Bookmark {
-    pub title: String,
-    pub url: Url,
-    pub folder: Option<String>,
-}
-
-impl Bookmark {
-    pub fn new(title: impl Into<String>, url: Url) -> Self {
-        Self {
-            title: title.into(),
-            url,
-            folder: None,
-        }
-    }
-
-    pub fn with_folder(mut self, folder: impl Into<String>) -> Self {
-        self.folder = Some(folder.into());
-        self
-    }
-}
-
-/// A history entry recording a page visit.
-#[derive(Debug, Clone)]
-pub struct HistoryEntry {
-    pub title: String,
-    pub url: Url,
-    pub timestamp: u64,
-}
-
-/// A download entry.
-#[derive(Debug, Clone)]
-pub struct DownloadEntry {
-    pub filename: String,
-    pub url: Url,
-    pub bytes_downloaded: u64,
-    pub total_bytes: Option<u64>,
-    pub state: DownloadState,
-}
-
-/// State of a download.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DownloadState {
-    InProgress,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-/// The sidebar state: visibility, active panel, and data for each panel.
+/// The sidebar state: visibility, active panel, and search filter.
+///
+/// The sidebar does not own data — it provides a view over the
+/// `BookmarkManager`, `HistoryManager`, and `DownloadManager` that live
+/// in the `App` struct. This struct tracks UI state only.
 #[derive(Debug, Clone)]
 pub struct Sidebar {
     /// Whether the sidebar is visible.
@@ -67,24 +23,29 @@ pub struct Sidebar {
     /// Which panel is active.
     pub panel: SidebarPanel,
 
-    /// Bookmarks list.
-    pub bookmarks: Vec<Bookmark>,
+    /// Search/filter text within the active panel.
+    pub search_text: String,
 
-    /// History entries (most recent first).
-    pub history: Vec<HistoryEntry>,
+    /// Whether the search field is focused.
+    pub search_focused: bool,
 
-    /// Active and recent downloads.
-    pub downloads: Vec<DownloadEntry>,
+    /// Width in logical pixels.
+    pub width: u32,
+
+    /// Scroll offset (in items) for the active panel.
+    pub scroll_offset: usize,
 }
 
 impl Sidebar {
+    /// Create a new sidebar with default state.
     pub fn new() -> Self {
         Self {
             visible: false,
             panel: SidebarPanel::Bookmarks,
-            bookmarks: Vec::new(),
-            history: Vec::new(),
-            downloads: Vec::new(),
+            search_text: String::new(),
+            search_focused: false,
+            width: 300,
+            scroll_offset: 0,
         }
     }
 
@@ -97,6 +58,8 @@ impl Sidebar {
     pub fn show(&mut self, panel: SidebarPanel) {
         self.visible = true;
         self.panel = panel;
+        self.search_text.clear();
+        self.scroll_offset = 0;
     }
 
     /// Hide the sidebar.
@@ -104,37 +67,68 @@ impl Sidebar {
         self.visible = false;
     }
 
-    /// Add a bookmark. Returns `false` if a bookmark with the same URL
-    /// already exists.
-    pub fn add_bookmark(&mut self, bookmark: Bookmark) -> bool {
-        if self
-            .bookmarks
-            .iter()
-            .any(|b| b.url == bookmark.url)
-        {
-            return false;
+    /// Switch to a different panel.
+    pub fn switch_panel(&mut self, panel: SidebarPanel) {
+        self.panel = panel;
+        self.search_text.clear();
+        self.scroll_offset = 0;
+    }
+
+    /// Set the search text for filtering.
+    pub fn set_search(&mut self, text: &str) {
+        self.search_text = text.to_owned();
+        self.scroll_offset = 0;
+    }
+
+    /// Clear the search filter.
+    pub fn clear_search(&mut self) {
+        self.search_text.clear();
+        self.scroll_offset = 0;
+    }
+
+    /// Scroll down by one page (e.g. 20 items).
+    pub fn scroll_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_add(20);
+    }
+
+    /// Scroll up by one page.
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(20);
+    }
+
+    /// Get the filtered bookmark list for the current search text.
+    #[must_use]
+    pub fn filtered_bookmarks<'a>(
+        &self,
+        bookmarks: &'a BookmarkManager,
+    ) -> Vec<&'a Bookmark> {
+        if self.search_text.is_empty() {
+            bookmarks.list(None)
+        } else {
+            bookmarks.search(&self.search_text)
         }
-        self.bookmarks.push(bookmark);
-        true
     }
 
-    /// Remove a bookmark by URL. Returns `true` if found and removed.
-    pub fn remove_bookmark(&mut self, url: &Url) -> bool {
-        let len = self.bookmarks.len();
-        self.bookmarks.retain(|b| &b.url != url);
-        self.bookmarks.len() < len
+    /// Get the filtered history list for the current search text.
+    #[must_use]
+    pub fn filtered_history<'a>(
+        &self,
+        history: &'a HistoryManager,
+    ) -> Vec<&'a crate::browser::history::HistoryEntry> {
+        if self.search_text.is_empty() {
+            history.recent(100).iter().collect()
+        } else {
+            history.search(&self.search_text)
+        }
     }
 
-    /// Record a history visit.
-    pub fn record_visit(&mut self, title: String, url: Url, timestamp: u64) {
-        self.history.insert(
-            0,
-            HistoryEntry {
-                title,
-                url,
-                timestamp,
-            },
-        );
+    /// Get the download list (no filtering, just active + recent).
+    #[must_use]
+    pub fn download_list<'a>(
+        &self,
+        downloads: &'a DownloadManager,
+    ) -> &'a [crate::browser::download::Download] {
+        downloads.all()
     }
 }
 
@@ -147,6 +141,7 @@ impl Default for Sidebar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use url::Url;
 
     #[test]
     fn toggle_visibility() {
@@ -159,29 +154,50 @@ mod tests {
     }
 
     #[test]
-    fn add_duplicate_bookmark_rejected() {
+    fn show_panel() {
         let mut sidebar = Sidebar::new();
-        let url = Url::parse("https://example.com").unwrap();
-        assert!(sidebar.add_bookmark(Bookmark::new("Example", url.clone())));
-        assert!(!sidebar.add_bookmark(Bookmark::new("Duplicate", url)));
-        assert_eq!(sidebar.bookmarks.len(), 1);
+        sidebar.show(SidebarPanel::History);
+        assert!(sidebar.visible);
+        assert_eq!(sidebar.panel, SidebarPanel::History);
     }
 
     #[test]
-    fn remove_bookmark() {
+    fn switch_panel_clears_search() {
         let mut sidebar = Sidebar::new();
-        let url = Url::parse("https://example.com").unwrap();
-        sidebar.add_bookmark(Bookmark::new("Example", url.clone()));
-        assert!(sidebar.remove_bookmark(&url));
-        assert!(sidebar.bookmarks.is_empty());
+        sidebar.set_search("test");
+        sidebar.switch_panel(SidebarPanel::Downloads);
+        assert!(sidebar.search_text.is_empty());
+        assert_eq!(sidebar.panel, SidebarPanel::Downloads);
     }
 
     #[test]
-    fn history_most_recent_first() {
+    fn filtered_bookmarks_with_search() {
+        let mut bookmarks = BookmarkManager::new();
+        bookmarks.add(Bookmark::new(
+            "Rust",
+            Url::parse("https://rust-lang.org").unwrap(),
+        ));
+        bookmarks.add(Bookmark::new(
+            "Go",
+            Url::parse("https://go.dev").unwrap(),
+        ));
+
         let mut sidebar = Sidebar::new();
-        sidebar.record_visit("First".into(), Url::parse("https://a.com").unwrap(), 100);
-        sidebar.record_visit("Second".into(), Url::parse("https://b.com").unwrap(), 200);
-        assert_eq!(sidebar.history[0].title, "Second");
-        assert_eq!(sidebar.history[1].title, "First");
+        sidebar.set_search("rust");
+        let filtered = sidebar.filtered_bookmarks(&bookmarks);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].title, "Rust");
+    }
+
+    #[test]
+    fn scroll_operations() {
+        let mut sidebar = Sidebar::new();
+        sidebar.scroll_down();
+        assert_eq!(sidebar.scroll_offset, 20);
+        sidebar.scroll_up();
+        assert_eq!(sidebar.scroll_offset, 0);
+        // Should not underflow
+        sidebar.scroll_up();
+        assert_eq!(sidebar.scroll_offset, 0);
     }
 }

@@ -52,6 +52,13 @@ pub struct Tab {
     /// Whether the forward button should be enabled.
     pub can_go_forward: bool,
 
+    /// Whether this tab is pinned (pinned tabs cannot be closed with Cmd+W,
+    /// appear first in the tab bar, and show only favicon).
+    pub pinned: bool,
+
+    /// Whether the address bar text is selected (for editing).
+    pub address_selected: bool,
+
     /// Navigation history — back stack (most recent last).
     history_back: Vec<Url>,
 
@@ -70,6 +77,8 @@ impl Tab {
             loading: false,
             can_go_back: false,
             can_go_forward: false,
+            pinned: false,
+            address_selected: false,
             history_back: Vec::new(),
             history_forward: Vec::new(),
         }
@@ -106,6 +115,29 @@ impl Tab {
         self.can_go_back = true;
         self.can_go_forward = !self.history_forward.is_empty();
         Some(&self.url)
+    }
+
+    /// Toggle the pinned state of this tab.
+    pub fn toggle_pin(&mut self) {
+        self.pinned = !self.pinned;
+    }
+
+    /// Create a duplicate of this tab (same URL, fresh ID, history reset).
+    #[must_use]
+    pub fn duplicate(&self) -> Self {
+        Self::new(self.url.clone())
+    }
+
+    /// Return the number of entries in the back history.
+    #[must_use]
+    pub fn back_history_len(&self) -> usize {
+        self.history_back.len()
+    }
+
+    /// Return the number of entries in the forward history.
+    #[must_use]
+    pub fn forward_history_len(&self) -> usize {
+        self.history_forward.len()
     }
 }
 
@@ -158,5 +190,41 @@ mod tests {
     fn go_back_on_empty_returns_none() {
         let mut tab = Tab::new(Url::parse("https://only.com").unwrap());
         assert!(tab.go_back().is_none());
+    }
+
+    #[test]
+    fn pin_toggle() {
+        let mut tab = Tab::new(Url::parse("https://example.com").unwrap());
+        assert!(!tab.pinned);
+        tab.toggle_pin();
+        assert!(tab.pinned);
+        tab.toggle_pin();
+        assert!(!tab.pinned);
+    }
+
+    #[test]
+    fn duplicate_creates_new_id() {
+        let original = Tab::new(Url::parse("https://example.com").unwrap());
+        let dup = original.duplicate();
+        assert_ne!(original.id, dup.id);
+        assert_eq!(original.url, dup.url);
+        assert!(!dup.pinned);
+    }
+
+    #[test]
+    fn history_lengths() {
+        let mut tab = Tab::new(Url::parse("https://a.com").unwrap());
+        assert_eq!(tab.back_history_len(), 0);
+        assert_eq!(tab.forward_history_len(), 0);
+
+        tab.push_navigation(Url::parse("https://b.com").unwrap());
+        assert_eq!(tab.back_history_len(), 1);
+
+        tab.push_navigation(Url::parse("https://c.com").unwrap());
+        assert_eq!(tab.back_history_len(), 2);
+
+        tab.go_back();
+        assert_eq!(tab.back_history_len(), 1);
+        assert_eq!(tab.forward_history_len(), 1);
     }
 }
