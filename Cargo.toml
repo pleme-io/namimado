@@ -34,6 +34,10 @@ shikumi = { git = "https://github.com/pleme-io/shikumi", optional = true }
 # Windowing
 winit = "0.30"
 
+# Scripting and hotkeys
+soushi = { git = "https://github.com/pleme-io/soushi" }
+awase = { git = "https://github.com/pleme-io/awase" }
+
 # MCP server
 kaname = { git = "https://github.com/pleme-io/kaname" }
 schemars = "1"
@@ -51,6 +55,7 @@ serde_yaml = "0.9"
 urlencoding = "2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+dirs = "6.0"
 
 [profile.release]
 codegen-units = 1

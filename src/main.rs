@@ -6,6 +6,7 @@ mod input;
 mod ipc;
 mod mcp;
 mod render;
+mod scripting;
 mod webview;
 
 use clap::Parser;

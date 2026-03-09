@@ -1,6 +1,33 @@
 use winit::event::{ElementState, Modifiers};
 use winit::keyboard::{Key, NamedKey};
 
+use awase::{Hotkey, Key as AwaseKey, Modifiers as AwaseMods};
+
+/// A keybinding definition: an awase `Hotkey` paired with an action name.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KeyBinding {
+    /// The hotkey that triggers this binding (awase type).
+    pub hotkey: Hotkey,
+    /// The action name to perform.
+    pub action: String,
+}
+
+/// Default keybindings using awase `Hotkey` types.
+#[must_use]
+pub fn default_bindings() -> Vec<KeyBinding> {
+    vec![
+        // Tab management
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::T), action: "new_tab".into() },
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::W), action: "close_tab".into() },
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::L), action: "focus_address_bar".into() },
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::R), action: "reload".into() },
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::D), action: "bookmark_page".into() },
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::F), action: "find_on_page".into() },
+        // Zoom
+        KeyBinding { hotkey: Hotkey::new(AwaseMods::CMD, AwaseKey::Num0), action: "zoom_reset".into() },
+    ]
+}
+
 /// A browser action triggered by a keyboard shortcut.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserAction {
@@ -287,6 +314,22 @@ impl Default for KeybindingManager {
 mod tests {
     use super::*;
     use winit::keyboard::Key;
+
+    #[test]
+    fn default_bindings_are_valid() {
+        let bindings = default_bindings();
+        assert!(!bindings.is_empty());
+        let has_new_tab = bindings.iter().any(|b| b.action == "new_tab");
+        assert!(has_new_tab, "should have a new_tab binding");
+    }
+
+    #[test]
+    fn bindings_are_serializable() {
+        let bindings = default_bindings();
+        let json = serde_json::to_string(&bindings).unwrap();
+        let deserialized: Vec<KeyBinding> = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.len(), bindings.len());
+    }
 
     #[test]
     fn process_standard_shortcut_new_tab() {
