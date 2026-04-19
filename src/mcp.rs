@@ -52,8 +52,14 @@ struct AddBookmarkRequest {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct GetBookmarksRequest {
-    /// Optional search query to filter bookmarks.
+    /// Optional search query — matches title, URL, or tags.
     query: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct HistorySearchRequest {
+    /// Query — matches title or URL substring.
+    query: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -303,25 +309,63 @@ impl NamimadoMcpServer {
         &self,
         Parameters(req): Parameters<GetBookmarksRequest>,
     ) -> Result<CallToolResult, McpError> {
-        Ok(ToolResponse::success(&serde_json::json!({
-            "action": "get_bookmarks",
-            "query": req.query,
-            "note": "Bookmark retrieval requires nami-core integration (not yet available).",
-        })))
+        let all = self.service.bookmarks_list();
+        let filtered = if let Some(q) = req.query.as_deref().filter(|s| !s.is_empty()) {
+            let q = q.to_ascii_lowercase();
+            all.into_iter()
+                .filter(|b| {
+                    b.title.to_ascii_lowercase().contains(&q)
+                        || b.url.to_ascii_lowercase().contains(&q)
+                        || b.tags.iter().any(|t| t.to_ascii_lowercase().contains(&q))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            all
+        };
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&filtered).unwrap_or_default(),
+        ))
     }
 
-    #[tool(description = "Add a URL to bookmarks.")]
+    #[tool(description = "Add a URL to bookmarks. Returns { added: true } if new, false if already bookmarked.")]
     async fn add_bookmark(
         &self,
         Parameters(req): Parameters<AddBookmarkRequest>,
     ) -> Result<CallToolResult, McpError> {
-        Ok(ToolResponse::success(&serde_json::json!({
-            "action": "add_bookmark",
-            "url": req.url,
-            "title": req.title,
-            "tags": req.tags,
-            "note": "Bookmark management requires nami-core integration (not yet available).",
-        })))
+        let Some(url) = req.url else {
+            return Ok(ToolResponse::error("url is required"));
+        };
+        let api_req = crate::api::AddBookmarkRequest {
+            url,
+            title: req.title,
+            folder: None,
+            tags: req.tags.unwrap_or_default(),
+        };
+        match self.service.bookmark_add(api_req) {
+            Ok(added) => Ok(ToolResponse::success(
+                &serde_json::json!({ "added": added }),
+            )),
+            Err(e) => Ok(ToolResponse::error(&format!("bookmark_add_failed: {e}"))),
+        }
+    }
+
+    #[tool(description = "Most recent browsing history entries, newest first. Records a visit on every successful navigate automatically.")]
+    async fn history_recent(&self) -> Result<CallToolResult, McpError> {
+        let entries = self.service.history_recent(50);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&entries).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Search browsing history by title or URL substring.")]
+    async fn history_search(
+        &self,
+        Parameters(req): Parameters<HistorySearchRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let entries = self.service.history_search(&req.query);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&entries).unwrap_or_default(),
+        ))
     }
 }
 

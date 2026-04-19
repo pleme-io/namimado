@@ -20,9 +20,11 @@ use std::time::SystemTime;
 use url::Url;
 
 use crate::api::{
-    NavigateRequest, NavigateResponse, ReloadResponse, ReportResponse, RulesInventory,
-    StateCellValue, StatusResponse,
+    AddBookmarkRequest, BookmarkInfo, HistoryInfo, NavigateRequest, NavigateResponse,
+    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
 };
+use crate::browser::bookmark::{Bookmark, BookmarkManager};
+use crate::browser::history::HistoryManager;
 
 #[cfg(feature = "browser-core")]
 use crate::webview::substrate::{NavigateOutcome, SubstratePipeline};
@@ -41,6 +43,8 @@ struct Inner {
     version: &'static str,
     loaded_at: SystemTime,
     reload_count: u64,
+    history: HistoryManager,
+    bookmarks: BookmarkManager,
 }
 
 impl NamimadoService {
@@ -54,6 +58,8 @@ impl NamimadoService {
                 version: env!("CARGO_PKG_VERSION"),
                 loaded_at: SystemTime::now(),
                 reload_count: 0,
+                history: HistoryManager::new(),
+                bookmarks: BookmarkManager::new(),
             })),
         }
     }
@@ -66,6 +72,8 @@ impl NamimadoService {
                 version: env!("CARGO_PKG_VERSION"),
                 loaded_at: SystemTime::now(),
                 reload_count: 0,
+                history: HistoryManager::new(),
+                bookmarks: BookmarkManager::new(),
             })),
         }
     }
@@ -134,6 +142,14 @@ impl NamimadoService {
                 .pipeline
                 .navigate(&url)
                 .map_err(|e| anyhow::anyhow!(e))?;
+            // Auto-record history — every successful navigate becomes
+            // a substrate-visible event. Title comes from the rendered
+            // page when available, URL-fallback otherwise.
+            let title = outcome
+                .title
+                .clone()
+                .unwrap_or_else(|| outcome.final_url.to_string());
+            inner.history.record_visit(title, outcome.final_url.clone());
             let response = NavigateResponse::from_outcome(&outcome);
             inner.last_outcome = Some(outcome);
             Ok(response)
@@ -144,6 +160,72 @@ impl NamimadoService {
             let _ = req;
             anyhow::bail!("browser-core feature disabled — rebuild with --features browser-core")
         }
+    }
+
+    /// GET /history — most recent visits, newest first.
+    pub fn history_recent(&self, count: usize) -> Vec<HistoryInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .history
+            .recent(count)
+            .iter()
+            .map(HistoryInfo::from_entry)
+            .collect()
+    }
+
+    /// GET /history?q= — search history by title or URL substring.
+    pub fn history_search(&self, query: &str) -> Vec<HistoryInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .history
+            .search(query)
+            .iter()
+            .map(|e| HistoryInfo::from_entry(*e))
+            .collect()
+    }
+
+    /// DELETE /history — wipe all.
+    pub fn history_clear(&self) {
+        let mut inner = self.inner.lock().expect("service mutex poisoned");
+        inner.history.clear();
+    }
+
+    /// GET /bookmarks — list all (all folders).
+    pub fn bookmarks_list(&self) -> Vec<BookmarkInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .bookmarks
+            .list(None)
+            .iter()
+            .map(|b| BookmarkInfo::from_bookmark(*b))
+            .collect()
+    }
+
+    /// POST /bookmarks — add. Returns true if newly added, false if
+    /// the URL was already bookmarked.
+    pub fn bookmark_add(&self, req: AddBookmarkRequest) -> Result<bool> {
+        let url = Url::parse(&req.url)
+            .or_else(|_| Url::parse(&format!("https://{}", req.url)))?;
+        let title = req
+            .title
+            .unwrap_or_else(|| url.to_string());
+        let mut bm = Bookmark::new(title, url);
+        if let Some(folder) = req.folder {
+            bm = bm.with_folder(folder);
+        }
+        if !req.tags.is_empty() {
+            bm = bm.with_tags(req.tags);
+        }
+        let mut inner = self.inner.lock().expect("service mutex poisoned");
+        Ok(inner.bookmarks.add(bm))
+    }
+
+    /// DELETE /bookmarks/:url — remove. Returns true if removed.
+    pub fn bookmark_remove(&self, url_str: &str) -> Result<bool> {
+        let url = Url::parse(url_str)
+            .or_else(|_| Url::parse(&format!("https://{}", url_str)))?;
+        let mut inner = self.inner.lock().expect("service mutex poisoned");
+        Ok(inner.bookmarks.remove(&url))
     }
 
     /// GET /report — the structured substrate report from the last
@@ -298,5 +380,104 @@ mod tests {
             assert_eq!(r.reload_count, expected);
         }
         assert_eq!(svc.status().reload_count, 3);
+    }
+
+    #[test]
+    fn history_starts_empty_and_grows_on_navigate_like_calls() {
+        // navigate() itself needs a server; manually exercise the
+        // auto-record path by calling into the history mutator the
+        // same way navigate() does — via the Inner lock.
+        let svc = NamimadoService::new();
+        assert!(svc.history_recent(50).is_empty());
+        // Simulate what navigate() does on success:
+        {
+            let mut inner = svc.inner.lock().unwrap();
+            let url = Url::parse("https://example.com/").unwrap();
+            inner.history.record_visit("Example", url);
+        }
+        let recent = svc.history_recent(50);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].title, "Example");
+        assert!(recent[0].url.starts_with("https://example.com"));
+    }
+
+    #[test]
+    fn history_search_matches_title_or_url() {
+        let svc = NamimadoService::new();
+        {
+            let mut inner = svc.inner.lock().unwrap();
+            inner.history.record_visit("Rust Forum", Url::parse("https://users.rust-lang.org/").unwrap());
+            inner.history.record_visit("News", Url::parse("https://news.ycombinator.com/").unwrap());
+        }
+        let rust = svc.history_search("rust");
+        assert_eq!(rust.len(), 1);
+        let ycom = svc.history_search("ycombinator");
+        assert_eq!(ycom.len(), 1);
+        let miss = svc.history_search("nothing-to-find");
+        assert!(miss.is_empty());
+    }
+
+    #[test]
+    fn history_clear_wipes_everything() {
+        let svc = NamimadoService::new();
+        {
+            let mut inner = svc.inner.lock().unwrap();
+            inner.history.record_visit("t", Url::parse("https://a/").unwrap());
+            inner.history.record_visit("u", Url::parse("https://b/").unwrap());
+        }
+        assert_eq!(svc.history_recent(10).len(), 2);
+        svc.history_clear();
+        assert!(svc.history_recent(10).is_empty());
+    }
+
+    #[test]
+    fn bookmark_add_roundtrips_and_prevents_duplicates() {
+        let svc = NamimadoService::new();
+        let req = AddBookmarkRequest {
+            url: "https://example.com/".into(),
+            title: Some("Example".into()),
+            folder: None,
+            tags: vec!["test".into()],
+        };
+        let first = svc.bookmark_add(req.clone()).unwrap();
+        assert!(first, "first add should return true (newly added)");
+        let second = svc.bookmark_add(req).unwrap();
+        assert!(!second, "second add should return false (already present)");
+        let list = svc.bookmarks_list();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].title, "Example");
+        assert_eq!(list[0].tags, vec!["test".to_owned()]);
+    }
+
+    #[test]
+    fn bookmark_remove_finds_by_url() {
+        let svc = NamimadoService::new();
+        svc.bookmark_add(AddBookmarkRequest {
+            url: "https://example.com/".into(),
+            title: Some("Example".into()),
+            folder: None,
+            tags: vec![],
+        })
+        .unwrap();
+        assert_eq!(svc.bookmarks_list().len(), 1);
+        let removed = svc.bookmark_remove("https://example.com/").unwrap();
+        assert!(removed);
+        assert!(svc.bookmarks_list().is_empty());
+    }
+
+    #[test]
+    fn bookmark_add_without_scheme_defaults_to_https() {
+        let svc = NamimadoService::new();
+        let added = svc
+            .bookmark_add(AddBookmarkRequest {
+                url: "example.com".into(),
+                title: Some("t".into()),
+                folder: None,
+                tags: vec![],
+            })
+            .unwrap();
+        assert!(added);
+        let list = svc.bookmarks_list();
+        assert!(list[0].url.starts_with("https://example.com"));
     }
 }

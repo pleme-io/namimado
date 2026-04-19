@@ -169,6 +169,11 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/openapi.json", "OpenAPI spec as JSON."),
         mk("GET", "/typescape", "This typescape manifest (self-describing)."),
         mk("GET", "/ui", "Embedded inspector SPA."),
+        mk("GET", "/history", "Browsing history; `?q=` searches, `?limit=N` recent."),
+        mk("DELETE", "/history", "Clear all history."),
+        mk("GET", "/bookmarks", "List all bookmarks."),
+        mk("POST", "/bookmarks", "Add a bookmark."),
+        mk("DELETE", "/bookmarks", "Remove a bookmark (`?url=…`)."),
     ]
 }
 
@@ -193,6 +198,8 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("add_bookmark", "(stub) bookmark a URL."),
         mk("config_get", "Read a config value by dotted key."),
         mk("config_set", "(runtime-only) set a config value."),
+        mk("history_recent", "Most recent browsing history entries — auto-recorded on every navigate."),
+        mk("history_search", "Search history by title/URL substring."),
     ]
 }
 

@@ -193,6 +193,60 @@ pub struct RulesInventory {
     pub wasm_agents: Vec<String>,
 }
 
+/// One entry in the browsing history. Timestamp is Unix seconds.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct HistoryInfo {
+    pub title: String,
+    pub url: String,
+    pub visited_at: i64,
+    pub visit_count: u32,
+}
+
+impl HistoryInfo {
+    #[must_use]
+    pub fn from_entry(e: &crate::browser::history::HistoryEntry) -> Self {
+        Self {
+            title: e.title.clone(),
+            url: e.url.to_string(),
+            visited_at: e.timestamp,
+            visit_count: e.visit_count,
+        }
+    }
+}
+
+/// One bookmark.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BookmarkInfo {
+    pub title: String,
+    pub url: String,
+    pub folder: Option<String>,
+    pub tags: Vec<String>,
+    pub added_at: i64,
+}
+
+impl BookmarkInfo {
+    #[must_use]
+    pub fn from_bookmark(b: &crate::browser::bookmark::Bookmark) -> Self {
+        Self {
+            title: b.title.clone(),
+            url: b.url.to_string(),
+            folder: b.folder.clone(),
+            tags: b.tags.clone(),
+            added_at: b.created_at,
+        }
+    }
+}
+
+/// POST /bookmarks — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct AddBookmarkRequest {
+    pub url: String,
+    pub title: Option<String>,
+    pub folder: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
 /// Uniform error shape returned by every API surface.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ApiError {

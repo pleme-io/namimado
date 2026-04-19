@@ -6,17 +6,18 @@
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Query, State},
     http::{StatusCode, header},
     response::{Html, IntoResponse, Redirect, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
+use serde::Deserialize;
 use std::net::SocketAddr;
 use tracing::info;
 
 use crate::api::{
-    ApiError, NavigateRequest, NavigateResponse, ReloadResponse, ReportResponse, RulesInventory,
-    StateCellValue, StatusResponse,
+    AddBookmarkRequest, ApiError, BookmarkInfo, HistoryInfo, NavigateRequest, NavigateResponse,
+    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
 };
 use crate::service::NamimadoService;
 
@@ -34,6 +35,11 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/rules", get(handle_rules))
         .route("/reload", post(handle_reload))
         .route("/typescape", get(handle_typescape))
+        .route("/history", get(handle_history))
+        .route("/history", delete(handle_history_clear))
+        .route("/bookmarks", get(handle_bookmarks_list))
+        .route("/bookmarks", post(handle_bookmark_add))
+        .route("/bookmarks", delete(handle_bookmark_remove))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -102,6 +108,72 @@ async fn handle_rules(State(svc): State<NamimadoService>) -> Json<RulesInventory
 
 async fn handle_typescape() -> Json<crate::typescape::NamimadoTypescape> {
     Json(crate::typescape::typescape())
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct HistoryQuery {
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+async fn handle_history(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HistoryQuery>,
+) -> Json<Vec<HistoryInfo>> {
+    if let Some(query) = q.q.as_deref().filter(|s| !s.is_empty()) {
+        Json(svc.history_search(query))
+    } else {
+        Json(svc.history_recent(q.limit.unwrap_or(50)))
+    }
+}
+
+async fn handle_history_clear(State(svc): State<NamimadoService>) -> StatusCode {
+    svc.history_clear();
+    StatusCode::NO_CONTENT
+}
+
+async fn handle_bookmarks_list(State(svc): State<NamimadoService>) -> Json<Vec<BookmarkInfo>> {
+    Json(svc.bookmarks_list())
+}
+
+async fn handle_bookmark_add(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<AddBookmarkRequest>,
+) -> Result<Json<BookmarkAddResponse>, ApiErrorResponse> {
+    svc.bookmark_add(req)
+        .map(|added| Json(BookmarkAddResponse { added }))
+        .map_err(|e| {
+            ApiErrorResponse(
+                StatusCode::BAD_REQUEST,
+                ApiError::new("bookmark_add_failed").with_detail(e.to_string()),
+            )
+        })
+}
+
+#[derive(Debug, serde::Serialize)]
+struct BookmarkAddResponse {
+    added: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct RemoveBookmarkQuery {
+    url: String,
+}
+
+async fn handle_bookmark_remove(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<RemoveBookmarkQuery>,
+) -> Result<Json<BookmarkAddResponse>, ApiErrorResponse> {
+    svc.bookmark_remove(&q.url)
+        .map(|removed| Json(BookmarkAddResponse { added: removed }))
+        .map_err(|e| {
+            ApiErrorResponse(
+                StatusCode::BAD_REQUEST,
+                ApiError::new("bookmark_remove_failed").with_detail(e.to_string()),
+            )
+        })
 }
 
 async fn handle_reload(
