@@ -82,7 +82,13 @@ impl NamimadoService {
     /// transforms.lisp + aliases.lisp and swap in a fresh pipeline.
     /// In-flight navigates complete first (mutex ordering). State
     /// store is reset too — seeded fresh from the new (defstate) specs.
+    ///
+    /// Also drops the cached theme scheme — the next call to
+    /// `theme::current_scheme()` re-reads config, re-loads any
+    /// scheme file, re-derives. That's how "one edit reflects
+    /// across every surface" works.
     pub fn reload(&self) -> ReloadResponse {
+        crate::theme::reload();
         #[cfg(feature = "browser-core")]
         {
             let fresh = SubstratePipeline::load();

@@ -45,6 +45,13 @@ pub struct NamimadoConfig {
 }
 
 /// Theme configuration for the browser chrome.
+///
+/// The color scheme follows the pleme-io shared convention via
+/// `irodzuki::ColorScheme` (base16). Point at a named preset or an
+/// external YAML file; the GPU window, the inspector SPA's
+/// `/theme.css`, and the `/theme` JSON all re-derive from whatever
+/// resolves here. Changing this and calling `POST /reload`
+/// propagates across every surface without restart.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeConfig {
     /// Whether to use the dark theme variant.
@@ -58,6 +65,28 @@ pub struct ThemeConfig {
     /// Opacity of the toolbar area (0.0 = transparent, 1.0 = opaque).
     #[serde(default = "default_opacity")]
     pub toolbar_opacity: f32,
+
+    /// Named preset. Currently supported: `"nord"` (default),
+    /// `"nord-light"`. Any unrecognized name falls back silently
+    /// to the default scheme + a startup warning.
+    #[serde(default)]
+    pub scheme: Option<String>,
+
+    /// Absolute path to a base16 scheme YAML file. Takes precedence
+    /// over `scheme`. A scheme YAML looks like:
+    ///
+    /// ```yaml
+    /// name: "Gruvbox Dark"
+    /// author: "Dawid Kurek"
+    /// base00: { r: 0.156, g: 0.156, b: 0.156, a: 1.0 }
+    /// base01: { r: 0.219, g: 0.211, b: 0.203, a: 1.0 }
+    /// # … base02 through base0f …
+    /// ```
+    ///
+    /// Matches the irodzuki::ColorScheme serde shape so any existing
+    /// pleme-io scheme file works unmodified.
+    #[serde(default)]
+    pub scheme_file: Option<std::path::PathBuf>,
 }
 
 /// Content blocking settings.
@@ -229,6 +258,8 @@ impl Default for ThemeConfig {
             dark: true,
             font_size: default_font_size(),
             toolbar_opacity: default_opacity(),
+            scheme: None,
+            scheme_file: None,
         }
     }
 }
