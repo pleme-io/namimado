@@ -35,6 +35,8 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/rules", get(handle_rules))
         .route("/reload", post(handle_reload))
         .route("/typescape", get(handle_typescape))
+        .route("/theme", get(handle_theme_json))
+        .route("/theme.css", get(handle_theme_css))
         .route("/history", get(handle_history))
         .route("/history", delete(handle_history_clear))
         .route("/bookmarks", get(handle_bookmarks_list))
@@ -108,6 +110,17 @@ async fn handle_rules(State(svc): State<NamimadoService>) -> Json<RulesInventory
 
 async fn handle_typescape() -> Json<crate::typescape::NamimadoTypescape> {
     Json(crate::typescape::typescape())
+}
+
+async fn handle_theme_json() -> Json<serde_json::Value> {
+    Json(serde_json::to_value(crate::theme::current_scheme()).unwrap_or_default())
+}
+
+async fn handle_theme_css() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        crate::theme::theme_css(),
+    )
 }
 
 #[derive(Debug, Deserialize, Default)]

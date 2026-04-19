@@ -24,6 +24,15 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::api::NavigateRequest;
 use crate::service::NamimadoService;
+use crate::theme::current_scheme;
+
+/// Convert an irodzuki Color (0.0..=1.0 f32 per channel) into a glyphon
+/// Color (0..=255 u8). The GPU window reads every text role through the
+/// scheme so a theme swap only needs the scheme reload.
+fn scheme_glyph(c: irodzuki::scheme::Color) -> Color {
+    let to_byte = |f: f32| (f.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Color::rgb(to_byte(c.r), to_byte(c.g), to_byte(c.b))
+}
 
 /// Launch the native GPU window. Blocks until the user closes it.
 pub fn run(initial_url: &str) -> Result<()> {
@@ -318,6 +327,15 @@ impl GpuApp {
         // Status.
         let status_buffer = text.create_buffer(&self.status, 12.0, 16.0);
 
+        // Pull text colors from the current irodzuki scheme so the
+        // GPU window auto-inherits any theme swap.
+        let scheme = current_scheme();
+        let addr_color   = scheme_glyph(scheme.base0c); // info cyan
+        let title_color  = scheme_glyph(scheme.base0d); // link blue
+        let body_color   = scheme_glyph(scheme.base05); // default fg
+        let insp_color   = scheme_glyph(scheme.base0a); // accent yellow
+        let status_color = scheme_glyph(scheme.base0b); // success green
+
         let addr_area = TextArea {
             buffer: &addr_buffer,
             left: GUTTER,
@@ -329,7 +347,7 @@ impl GpuApp {
                 right: size.width as i32,
                 bottom: TOP as i32,
             },
-            default_color: Color::rgb(143, 188, 187), // nord-7
+            default_color: addr_color,
             custom_glyphs: &[],
         };
         let title_area = TextArea {
@@ -343,7 +361,7 @@ impl GpuApp {
                 right: (left_x + left_w) as i32,
                 bottom: content_top as i32 + 6,
             },
-            default_color: Color::rgb(136, 192, 208), // nord-8
+            default_color: title_color,
             custom_glyphs: &[],
         };
         let body_area = TextArea {
@@ -357,7 +375,7 @@ impl GpuApp {
                 right: (left_x + left_w) as i32,
                 bottom: content_bot as i32,
             },
-            default_color: Color::rgb(216, 222, 233), // nord-4
+            default_color: body_color,
             custom_glyphs: &[],
         };
         let insp_area = TextArea {
@@ -371,7 +389,7 @@ impl GpuApp {
                 right: (right_x + right_w) as i32,
                 bottom: content_bot as i32,
             },
-            default_color: Color::rgb(235, 203, 139), // nord-13
+            default_color: insp_color,
             custom_glyphs: &[],
         };
         let status_area = TextArea {
@@ -385,7 +403,7 @@ impl GpuApp {
                 right: size.width as i32,
                 bottom: size.height as i32,
             },
-            default_color: Color::rgb(163, 190, 140), // nord-14
+            default_color: status_color,
             custom_glyphs: &[],
         };
 
@@ -418,11 +436,13 @@ impl GpuApp {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
+                        // Background = scheme.base00 (the "primary
+                        // background" slot). f32 components are sRGB
+                        // linear-ish; wgpu does its own conversion.
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            // nord-0 #2e3440 in linear-ish rgb
-                            r: 0.031,
-                            g: 0.039,
-                            b: 0.051,
+                            r: f64::from(scheme.base00.r).powf(2.2),
+                            g: f64::from(scheme.base00.g).powf(2.2),
+                            b: f64::from(scheme.base00.b).powf(2.2),
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,

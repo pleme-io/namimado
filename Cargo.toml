@@ -12,7 +12,7 @@ default = ["browser-core", "http-server", "gpu-chrome"]
 full = ["browser-core", "gpu-chrome", "http-server"]
 browser-core = ["dep:nami-core", "dep:reqwest"]
 gpu-chrome = [
-  "dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi",
+  "dep:garasu", "dep:egaku", "dep:shikumi",
   "dep:wgpu", "dep:glyphon", "dep:pollster",
 ]
 # HTTP REST server — one face of the multi-face API. OpenAPI spec at
@@ -38,7 +38,7 @@ pollster = { version = "0.4", optional = true }
 # GPU browser chrome
 garasu = { git = "https://github.com/pleme-io/garasu", optional = true }
 egaku = { git = "https://github.com/pleme-io/egaku", optional = true }
-irodzuki = { git = "https://github.com/pleme-io/irodzuki", optional = true }
+irodzuki = { git = "https://github.com/pleme-io/irodzuki" }
 shikumi = { git = "https://github.com/pleme-io/shikumi", optional = true }
 
 # Servo browser engine (embedded)

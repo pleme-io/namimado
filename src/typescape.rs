@@ -169,6 +169,8 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/openapi.json", "OpenAPI spec as JSON."),
         mk("GET", "/typescape", "This typescape manifest (self-describing)."),
         mk("GET", "/ui", "Embedded inspector SPA."),
+        mk("GET", "/theme", "Current irodzuki ColorScheme as JSON — palette the GPU window + /ui both inherit."),
+        mk("GET", "/theme.css", "Same scheme as CSS custom properties (`:root { --bg: …; --fg: …; --accent: …; }`) — the inspector SPA links this so a scheme swap propagates without a rebuild."),
         mk("GET", "/history", "Browsing history; `?q=` searches, `?limit=N` recent."),
         mk("DELETE", "/history", "Clear all history."),
         mk("GET", "/bookmarks", "List all bookmarks."),

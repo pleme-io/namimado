@@ -21,6 +21,7 @@ mod mcp;
 mod render;
 mod scripting;
 mod service;
+mod theme;
 mod typescape;
 mod webview;
 
