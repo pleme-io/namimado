@@ -20,10 +20,11 @@ use std::time::SystemTime;
 use url::Url;
 
 use crate::api::{
-    AddBookmarkRequest, BookmarkInfo, ExtensionInstallRequest, ExtensionInstallResponse,
-    ExtensionSummary, ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse,
-    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
+    AddBookmarkRequest, BookmarkInfo, CommandInfo, DispatchKeyRequest, DispatchKeyResponse,
+    ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary, ExtensionToggleRequest,
+    HistoryInfo, NavigateRequest, NavigateResponse, ReaderResponse, ReloadResponse,
+    ReportResponse, RulesInventory, StateCellValue, StatusResponse, StorageEntry,
+    StorageSetRequest, StorageSummary,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -402,6 +403,61 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn extensions_content_hash(&self) -> String {
         String::new()
+    }
+
+    /// GET /commands — full command+binding inventory.
+    #[cfg(feature = "browser-core")]
+    pub fn commands_list(&self) -> Vec<CommandInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.commands_inventory()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn commands_list(&self) -> Vec<CommandInfo> {
+        Vec::new()
+    }
+
+    /// POST /commands/dispatch — simulate a key sequence.
+    #[cfg(feature = "browser-core")]
+    pub fn dispatch_key(&self, req: DispatchKeyRequest) -> DispatchKeyResponse {
+        let mode = req.mode.as_deref().unwrap_or("any");
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        match inner.pipeline.dispatch_key(&req.typed, mode) {
+            crate::webview::substrate::KeyDispatch::Run { bind, command } => {
+                DispatchKeyResponse {
+                    outcome: "run".into(),
+                    command: Some(bind.command.clone()),
+                    action: command.as_ref().and_then(|c| c.action.clone()),
+                    body: command.as_ref().and_then(|c| c.body.clone()),
+                    key: Some(bind.canonical_key()),
+                }
+            }
+            crate::webview::substrate::KeyDispatch::Prefix => DispatchKeyResponse {
+                outcome: "prefix".into(),
+                command: None,
+                action: None,
+                body: None,
+                key: None,
+            },
+            crate::webview::substrate::KeyDispatch::Miss => DispatchKeyResponse {
+                outcome: "miss".into(),
+                command: None,
+                action: None,
+                body: None,
+                key: None,
+            },
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn dispatch_key(&self, _req: DispatchKeyRequest) -> DispatchKeyResponse {
+        DispatchKeyResponse {
+            outcome: "miss".into(),
+            command: None,
+            action: None,
+            body: None,
+            key: None,
+        }
     }
 
     /// GET /bookmarks — list all (all folders).

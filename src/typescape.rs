@@ -22,6 +22,7 @@ const PACK_FILES: &[&str] = &[
     "bootstrap.lisp",
     "tailwind.lisp",
     "blocker-trackers.lisp",
+    "vim-mode.lisp",
 ];
 
 /// namimado typescape — namimado's dimensions plus the embedded
@@ -64,6 +65,8 @@ pub enum PackKind {
     Emit,
     /// Content blocking: domain + selector rules stripping trackers.
     Blocker,
+    /// Keyboard pack: (defcommand) + (defbind) forms.
+    Keybindings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -148,6 +151,7 @@ fn normalize_packs() -> Vec<NormalizePackInfo> {
             "bootstrap.lisp" => mk(f, PackKind::Inbound, "Bootstrap component classes → n-*"),
             "tailwind.lisp" => mk(f, PackKind::Inbound, "Tailwind utility-class patterns → n-*"),
             "blocker-trackers.lisp" => mk(f, PackKind::Blocker, "Third-party trackers + ad-network blocklist"),
+            "vim-mode.lisp" => mk(f, PackKind::Keybindings, "Vim-mode defaults — modal navigation, scroll, reader/blocker toggles"),
             _ => mk(f, PackKind::Inbound, "(undocumented)"),
         })
         .collect();
@@ -191,6 +195,8 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/extensions/:name", "Full ExtensionSpec for one installed extension."),
         mk("DELETE", "/extensions/:name", "Uninstall an extension."),
         mk("POST", "/extensions/:name/enabled", "Toggle enabled state at runtime."),
+        mk("GET", "/commands", "Every (defcommand) + the chords that bind to it."),
+        mk("POST", "/commands/dispatch", "Simulate a typed key sequence; returns run/prefix/miss."),
     ]
 }
 
@@ -229,6 +235,8 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("extension_install", "Install (defextension) bundle from raw Lisp source."),
         mk("extension_set_enabled", "Toggle extension enabled state at runtime."),
         mk("extension_remove", "Uninstall an extension."),
+        mk("commands_list", "Every (defcommand) + its bound chords."),
+        mk("dispatch_key", "Simulate a typed key sequence against (defbind)s."),
     ]
 }
 
@@ -283,12 +291,19 @@ mod tests {
         for pack in &ts.normalize_packs {
             let is_emit = pack.file.ends_with("-emit.lisp");
             let is_blocker = pack.file.starts_with("blocker-");
+            let is_keybindings = pack.file.ends_with("-mode.lisp");
             match pack.kind {
                 PackKind::Emit => assert!(is_emit, "pack {} marked Emit but not -emit.lisp", pack.file),
                 PackKind::Blocker => assert!(is_blocker, "pack {} marked Blocker but not blocker-*", pack.file),
+                PackKind::Keybindings => assert!(
+                    is_keybindings,
+                    "pack {} marked Keybindings but not *-mode.lisp",
+                    pack.file
+                ),
                 PackKind::Inbound => {
                     assert!(!is_emit, "pack {} marked Inbound but ends in -emit.lisp", pack.file);
                     assert!(!is_blocker, "pack {} marked Inbound but starts with blocker-", pack.file);
+                    assert!(!is_keybindings, "pack {} marked Inbound but ends in -mode.lisp", pack.file);
                 }
             }
         }
@@ -332,6 +347,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 18, "18 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 20, "20 DSL keywords expected in nami-core");
     }
 }

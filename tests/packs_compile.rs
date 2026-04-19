@@ -47,6 +47,19 @@ fn every_shipped_pack_compiles_cleanly() {
             assert!(!specs.is_empty(), "blocker pack {name} produced zero specs");
             continue;
         }
+        // Keyboard packs ship (defcommand) + (defbind); they're routed
+        // through the command domain, not normalize.
+        if name.ends_with("-mode.lisp") {
+            let cmds = nami_core::command::compile_commands(src)
+                .unwrap_or_else(|e| panic!("keyboard pack {name} (commands) failed: {e}"));
+            let binds = nami_core::command::compile_binds(src)
+                .unwrap_or_else(|e| panic!("keyboard pack {name} (binds) failed: {e}"));
+            assert!(
+                !cmds.is_empty() || !binds.is_empty(),
+                "keyboard pack {name} produced zero specs"
+            );
+            continue;
+        }
         match nami_core::normalize::compile(src) {
             Ok(specs) => {
                 assert!(
@@ -82,6 +95,12 @@ fn pack_rule_names_are_unique_within_pack() {
                 .into_iter()
                 .map(|s| s.name)
                 .collect()
+        } else if name.ends_with("-mode.lisp") {
+            nami_core::command::compile_commands(&src)
+                .expect("compile")
+                .into_iter()
+                .map(|s| s.name)
+                .collect()
         } else {
             nami_core::normalize::compile(&src)
                 .expect("compile")
@@ -109,6 +128,9 @@ fn emit_packs_target_tags_without_n_prefix() {
             continue;
         }
         if name.starts_with("blocker-") {
+            continue;
+        }
+        if name.ends_with("-mode.lisp") {
             continue;
         }
         let specs = nami_core::normalize::compile(&src).expect("compile");
@@ -140,6 +162,9 @@ fn inbound_packs_target_canonical_n_prefix() {
             continue;
         }
         if name.starts_with("blocker-") {
+            continue;
+        }
+        if name.ends_with("-mode.lisp") {
             continue;
         }
         let specs = nami_core::normalize::compile(&src).expect("compile");

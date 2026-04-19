@@ -200,6 +200,8 @@ pub struct RulesInventory {
     pub storages: Vec<String>,
     pub extensions: Vec<String>,
     pub readers: Vec<String>,
+    pub commands: Vec<String>,
+    pub binds: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -265,6 +267,46 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// POST /commands/dispatch — input. Simulates a key sequence against
+/// the bind registry in a given mode. Useful for testing bindings
+/// from MCP / tests without wiring into the GPU key pipeline.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DispatchKeyRequest {
+    /// Typed-so-far sequence. Canonicalization is performed server-side.
+    pub typed: String,
+    /// Dispatch mode. Common values: "normal", "insert", "visual",
+    /// "command", "any". Default "any".
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+/// POST /commands/dispatch — response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DispatchKeyResponse {
+    /// "run" | "prefix" | "miss".
+    pub outcome: String,
+    /// When outcome = "run": the resolved command name.
+    pub command: Option<String>,
+    /// When outcome = "run": the built-in action, if any.
+    pub action: Option<String>,
+    /// When outcome = "run": the tatara-lisp body, if any.
+    pub body: Option<String>,
+    /// When outcome = "run": the canonical key that fired.
+    pub key: Option<String>,
+}
+
+/// GET /commands — one row per (defcommand) + its current bindings.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CommandInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub action: Option<String>,
+    pub body: Option<String>,
+    pub default_key: Option<String>,
+    /// All bound chords that currently target this command.
+    pub bound_keys: Vec<String>,
 }
 
 /// GET /reader — simplified-view response.

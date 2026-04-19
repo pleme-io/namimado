@@ -34,6 +34,7 @@ use nami_core::derived::DerivedRegistry;
 use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
 use nami_core::blocker::{BlockerRegistry, BlockerSpec};
+use nami_core::command::{BindRegistry, BindSpec, CommandRegistry, CommandSpec, SequenceMatch};
 use nami_core::extension::{ExtensionRegistry, ExtensionSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::normalize::NormalizeRegistry;
@@ -95,6 +96,20 @@ pub struct NavigateOutcome {
     pub report: SubstrateReport,
 }
 
+/// Result of dispatching a typed key sequence against the bind
+/// registry. `Run` fires the command; `Prefix` means "wait for more
+/// keys"; `Miss` cancels the sequence. Mirrors the substrate
+/// `SequenceMatch` enum with the resolved command attached.
+#[derive(Debug, Clone)]
+pub enum KeyDispatch {
+    Run {
+        bind: BindSpec,
+        command: Option<CommandSpec>,
+    },
+    Prefix,
+    Miss,
+}
+
 /// Loaded substrate + transforms + aliases + state store, plus a
 /// blocking HTTP client. Persists across navigates so state cells
 /// accumulate and effect history is real.
@@ -111,6 +126,8 @@ pub struct SubstratePipeline {
     blockers: BlockerRegistry,
     extensions: Arc<std::sync::Mutex<ExtensionRegistry>>,
     readers: ReaderRegistry,
+    commands: CommandRegistry,
+    binds: BindRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
     storage_registry: StorageRegistry,
@@ -139,6 +156,8 @@ pub struct SubstratePipeline {
     storage_names: Vec<String>,
     extension_names: Vec<String>,
     reader_names: Vec<String>,
+    command_names: Vec<String>,
+    bind_chords: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -265,6 +284,21 @@ impl SubstratePipeline {
         extension_registry.extend(extension_specs);
         let extensions = Arc::new(std::sync::Mutex::new(extension_registry));
 
+        // Commands + bindings. Compile from the full ext_src so users
+        // can drop keyboard packs into substrate.d/.
+        let command_specs: Vec<CommandSpec> =
+            nami_core::command::compile_commands(&ext_src).unwrap_or_default();
+        let command_names: Vec<String> =
+            command_specs.iter().map(|s| s.name.clone()).collect();
+        let mut commands = CommandRegistry::new();
+        commands.extend(command_specs);
+
+        let bind_specs: Vec<BindSpec> =
+            nami_core::command::compile_binds(&ext_src).unwrap_or_default();
+        let mut binds = BindRegistry::new();
+        binds.extend(bind_specs);
+        let bind_chords = binds.chords();
+
         // Reader profiles — if none declared, register the built-in
         // default so /reader works out of the box on any page.
         let reader_specs: Vec<ReaderSpec> =
@@ -318,7 +352,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -336,6 +370,8 @@ impl SubstratePipeline {
             storage_registry.len(),
             extensions.lock().map(|r| r.len()).unwrap_or(0),
             readers.len(),
+            commands.len(),
+            binds.len(),
         );
 
         Self {
@@ -351,6 +387,8 @@ impl SubstratePipeline {
             blockers,
             extensions,
             readers,
+            commands,
+            binds,
             wasm_agents,
             wasm_host,
             storage_registry,
@@ -374,7 +412,64 @@ impl SubstratePipeline {
             storage_names,
             extension_names,
             reader_names,
+            command_names,
+            bind_chords,
         }
+    }
+
+    /// Dispatch a typed-so-far key sequence in `mode` against the
+    /// bind registry. Returns whichever of Complete/Prefix/Miss fits;
+    /// the caller advances the sequence state or invokes the command.
+    #[must_use]
+    pub fn dispatch_key(&self, typed: &str, mode: &str) -> KeyDispatch {
+        match self.binds.match_sequence(typed, mode) {
+            SequenceMatch::Complete(bind) => {
+                let command = self
+                    .commands
+                    .get(&bind.command)
+                    .cloned();
+                KeyDispatch::Run {
+                    bind: bind.clone(),
+                    command,
+                }
+            }
+            SequenceMatch::Prefix => KeyDispatch::Prefix,
+            SequenceMatch::Miss => KeyDispatch::Miss,
+        }
+    }
+
+    /// Full command + binding inventory for the inspector / MCP.
+    /// Returns (command_names, chord_strings).
+    #[must_use]
+    pub fn keybindings_summary(&self) -> (Vec<String>, Vec<String>) {
+        (self.command_names.clone(), self.bind_chords.clone())
+    }
+
+    /// Every command + every chord that invokes it, joined. Powers
+    /// GET /commands and the MCP `commands_list` tool.
+    #[must_use]
+    pub fn commands_inventory(&self) -> Vec<crate::api::CommandInfo> {
+        self.commands
+            .specs()
+            .iter()
+            .map(|c| {
+                let bound_keys: Vec<String> = self
+                    .binds
+                    .specs()
+                    .iter()
+                    .filter(|b| b.command == c.name)
+                    .map(|b| b.canonical_key())
+                    .collect();
+                crate::api::CommandInfo {
+                    name: c.name.clone(),
+                    description: c.description.clone(),
+                    action: c.action.clone(),
+                    body: c.body.clone(),
+                    default_key: c.default_key.clone(),
+                    bound_keys,
+                }
+            })
+            .collect()
     }
 
     /// Apply a named reader profile to the last-parsed document
@@ -501,6 +596,8 @@ impl SubstratePipeline {
             storages: self.storage_names.clone(),
             extensions: self.extension_names.clone(),
             readers: self.reader_names.clone(),
+            commands: self.command_names.clone(),
+            binds: self.bind_chords.clone(),
         }
     }
 

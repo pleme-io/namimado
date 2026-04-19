@@ -57,6 +57,14 @@ struct GetBookmarksRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct DispatchKeyToolRequest {
+    /// Typed-so-far sequence (Vim-style space-separated chords OK).
+    typed: String,
+    /// Dispatch mode — "normal", "insert", "visual", "any".
+    mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ReaderRequest {
     /// Named (defreader) profile. None uses the host-matching default.
     name: Option<String>,
@@ -406,6 +414,40 @@ impl NamimadoMcpServer {
                 "no_navigate_yet: call the navigate tool first",
             )),
         }
+    }
+
+    #[tool(
+        description = "List every (defcommand) with the bound chords that \
+                       currently invoke it. Same payload as GET /commands. \
+                       Use to introspect the Vim-mode surface the user has \
+                       authored (plus any shipped pack)."
+    )]
+    async fn commands_list(&self) -> Result<CallToolResult, McpError> {
+        let list = self.service.commands_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&list).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Dispatch a typed key sequence against the (defbind) \
+                       registry in a given mode. Returns run/prefix/miss. \
+                       Used to test bindings, prototype sequences, or drive \
+                       the browser from an MCP client without touching the \
+                       GPU key pipeline. Same as POST /commands/dispatch."
+    )]
+    async fn dispatch_key(
+        &self,
+        Parameters(req): Parameters<DispatchKeyToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::DispatchKeyRequest {
+            typed: req.typed,
+            mode: req.mode,
+        };
+        let resp = self.service.dispatch_key(api_req);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
     }
 
     #[tool(

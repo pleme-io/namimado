@@ -16,10 +16,11 @@ use std::net::SocketAddr;
 use tracing::info;
 
 use crate::api::{
-    AddBookmarkRequest, ApiError, BookmarkInfo, ExtensionInstallRequest, ExtensionInstallResponse,
-    ExtensionSummary, ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse,
-    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
+    AddBookmarkRequest, ApiError, BookmarkInfo, CommandInfo, DispatchKeyRequest,
+    DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
+    ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, ReaderResponse,
+    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
+    StorageEntry, StorageSetRequest, StorageSummary,
 };
 use crate::service::NamimadoService;
 
@@ -62,6 +63,8 @@ pub fn router(service: NamimadoService) -> Router {
             get(handle_extension_get).delete(handle_extension_remove),
         )
         .route("/extensions/:name/enabled", post(handle_extension_set_enabled))
+        .route("/commands", get(handle_commands_list))
+        .route("/commands/dispatch", post(handle_dispatch_key))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -383,6 +386,17 @@ async fn handle_extension_set_enabled(
                 ApiError::new("extension_unknown").with_detail(name),
             )
         })
+}
+
+async fn handle_commands_list(State(svc): State<NamimadoService>) -> Json<Vec<CommandInfo>> {
+    Json(svc.commands_list())
+}
+
+async fn handle_dispatch_key(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<DispatchKeyRequest>,
+) -> Json<DispatchKeyResponse> {
+    Json(svc.dispatch_key(req))
 }
 
 async fn handle_reload(
