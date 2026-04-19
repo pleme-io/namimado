@@ -136,6 +136,10 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
     println!("effects fired:  {}", r.effects_fired);
     println!("agents fired:   {}", r.agents_fired);
     println!("transforms:     {}", r.transforms_applied);
+    println!(
+        "inline-lisp:    {} ok · {} err",
+        r.inline_lisp_evaluated, r.inline_lisp_failed
+    );
     for hit in &r.transform_hits {
         println!("  • {hit}");
     }

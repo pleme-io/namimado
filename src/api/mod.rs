@@ -81,6 +81,9 @@ pub struct ReportResponse {
     pub transform_hits: Vec<String>,
     pub state_snapshot: Vec<StateCellValue>,
     pub derived_snapshot: Vec<StateCellValue>,
+    /// Inline `<l-eval>` macros processed on this page.
+    pub inline_lisp_evaluated: usize,
+    pub inline_lisp_failed: usize,
 }
 
 impl ReportResponse {
@@ -119,6 +122,8 @@ impl ReportResponse {
                     value: value.clone(),
                 })
                 .collect(),
+            inline_lisp_evaluated: r.inline_lisp_evaluated,
+            inline_lisp_failed: r.inline_lisp_failed,
         }
     }
 }

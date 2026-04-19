@@ -56,6 +56,10 @@ pub struct SubstrateReport {
     pub state_snapshot: Vec<(String, Value)>,
     pub derived_snapshot: Vec<(String, Value)>,
     pub transform_hits: Vec<String>,
+    /// Inline `<l-eval>` / `<script type=application/tatara-lisp>`
+    /// macros processed this pass.
+    pub inline_lisp_evaluated: usize,
+    pub inline_lisp_failed: usize,
 }
 
 /// The outcome of navigating to a URL.
@@ -183,10 +187,19 @@ impl SubstratePipeline {
     pub fn navigate(&mut self, url: &Url) -> Result<NavigateOutcome> {
         let body = self.fetch(url)?;
         let mut doc = Document::parse(&body);
+
+        // Phase −1 — expand inline `<l-eval>` / tatara-lisp script macros
+        // BEFORE framework detection so any DOM they emit is visible to
+        // downstream passes.
+        let evaluator = nami_core::eval::NamiEvaluator::new();
+        let inline_report = nami_core::inline_lisp::expand(&mut doc, &evaluator);
+
         let detections = nami_core::framework::detect(&doc);
         let page_state = nami_core::state::extract(&doc);
 
         let mut report = SubstrateReport::default();
+        report.inline_lisp_evaluated = inline_report.evaluated;
+        report.inline_lisp_failed = inline_report.failed;
         report.frameworks = detections
             .iter()
             .map(|d| (format!("{:?}", d.framework), d.confidence))

@@ -484,6 +484,10 @@ fn format_inspector(resp: &crate::api::NavigateResponse) -> String {
     out.push_str(&format!("effects     {}\n", r.effects_fired));
     out.push_str(&format!("agents      {}\n", r.agents_fired));
     out.push_str(&format!("transforms  {}\n", r.transforms_applied));
+    out.push_str(&format!(
+        "inline-lisp {} ok · {} err\n",
+        r.inline_lisp_evaluated, r.inline_lisp_failed
+    ));
     if let Some(route) = &r.routes_matched {
         out.push_str(&format!("route       {route}\n"));
     }
