@@ -203,6 +203,8 @@ pub struct RulesInventory {
     pub commands: Vec<String>,
     pub binds: Vec<String>,
     pub omniboxes: Vec<String>,
+    pub i18n: Vec<String>,
+    pub security_policies: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -268,6 +270,36 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// GET /i18n/:namespace — translations for a namespace.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct I18nResponse {
+    pub namespace: String,
+    pub locale: String,
+    /// Resolved value, with fallback chain applied.
+    pub value: String,
+    /// True if the fallback chain hit a real bundle; false if we
+    /// degraded to the raw key.
+    pub resolved: bool,
+}
+
+/// GET /i18n/:namespace/missing?locale=…
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct I18nCoverage {
+    pub namespace: String,
+    pub locale: String,
+    pub available_locales: Vec<String>,
+    pub missing_keys: Vec<String>,
+}
+
+/// GET /security-policy?host=…
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SecurityPolicyResponse {
+    pub host: String,
+    pub policy_name: Option<String>,
+    /// `(header_name, value)` pairs ready to emit on HTTP responses.
+    pub headers: Vec<(String, String)>,
 }
 
 /// GET /storage/:name/index — per-store index inventory + values.

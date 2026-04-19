@@ -22,10 +22,10 @@ use url::Url;
 use crate::api::{
     AddBookmarkRequest, BookmarkInfo, CommandInfo, DispatchKeyRequest, DispatchKeyResponse,
     ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary, ExtensionToggleRequest,
-    HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse, OmniboxSuggestion,
-    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
-    VerifyExtensionResponse,
+    HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
+    OmniboxSuggestion, ReaderResponse, ReloadResponse, ReportResponse, RulesInventory,
+    SecurityPolicyResponse, StateCellValue, StatusResponse, StorageEntry, StorageSetRequest,
+    StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -579,6 +579,103 @@ impl NamimadoService {
         }
     }
 
+    /// GET /storage/:name/index/:path/range?lo=&hi=
+    #[cfg(feature = "browser-core")]
+    pub fn storage_by_index_range(
+        &self,
+        store: &str,
+        path: &str,
+        lo: &str,
+        hi: &str,
+    ) -> Option<Vec<StorageEntry>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let hits = inner.pipeline.storage_by_index_range(store, path, lo, hi)?;
+        Some(
+            hits.into_iter()
+                .map(|(key, value)| StorageEntry { key, value })
+                .collect(),
+        )
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_by_index_range(
+        &self,
+        _s: &str,
+        _p: &str,
+        _lo: &str,
+        _hi: &str,
+    ) -> Option<Vec<StorageEntry>> {
+        None
+    }
+
+    /// GET /i18n/:namespace?locale=&key=
+    #[cfg(feature = "browser-core")]
+    pub fn i18n_get(&self, namespace: &str, locale: &str, key: &str) -> I18nResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let value = inner.pipeline.i18n_get(namespace, locale, key);
+        let resolved = value != key;
+        I18nResponse {
+            namespace: namespace.to_owned(),
+            locale: locale.to_owned(),
+            value,
+            resolved,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn i18n_get(&self, namespace: &str, locale: &str, key: &str) -> I18nResponse {
+        I18nResponse {
+            namespace: namespace.to_owned(),
+            locale: locale.to_owned(),
+            value: key.to_owned(),
+            resolved: false,
+        }
+    }
+
+    /// GET /i18n/:namespace/coverage?locale=
+    #[cfg(feature = "browser-core")]
+    pub fn i18n_coverage(&self, namespace: &str, locale: &str) -> I18nCoverage {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        I18nCoverage {
+            namespace: namespace.to_owned(),
+            locale: locale.to_owned(),
+            available_locales: inner.pipeline.i18n_locales(namespace),
+            missing_keys: inner.pipeline.i18n_missing(namespace, locale),
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn i18n_coverage(&self, namespace: &str, locale: &str) -> I18nCoverage {
+        I18nCoverage {
+            namespace: namespace.to_owned(),
+            locale: locale.to_owned(),
+            available_locales: vec![],
+            missing_keys: vec![],
+        }
+    }
+
+    /// GET /security-policy?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn security_policy_for(&self, host: &str) -> SecurityPolicyResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let policy_name = inner.pipeline.security_policy_for(host).map(|s| s.name);
+        let headers = inner.pipeline.security_policy_headers(host).headers;
+        SecurityPolicyResponse {
+            host: host.to_owned(),
+            policy_name,
+            headers,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn security_policy_for(&self, host: &str) -> SecurityPolicyResponse {
+        SecurityPolicyResponse {
+            host: host.to_owned(),
+            policy_name: None,
+            headers: vec![],
+        }
+    }
+
     /// GET /storage/:name/index — list every declared index and its
     /// distinct projected values. Useful for range scans + inspector
     /// surfaces.
@@ -1077,6 +1174,38 @@ mod tests {
         assert!(svc.revoke_pubkey(&pubkey));
         let r3 = svc.verify_signed_extension(&signed);
         assert_eq!(r3.status, "valid-but-untrusted");
+    }
+
+    #[test]
+    fn i18n_falls_back_to_raw_key_when_empty() {
+        let svc = NamimadoService::new();
+        let r = svc.i18n_get("core", "en", "nothing.here");
+        assert_eq!(r.value, "nothing.here");
+        assert!(!r.resolved);
+    }
+
+    #[test]
+    fn i18n_coverage_empty_when_no_bundles() {
+        let svc = NamimadoService::new();
+        let c = svc.i18n_coverage("core", "ja");
+        assert!(c.available_locales.is_empty());
+        assert!(c.missing_keys.is_empty());
+    }
+
+    #[test]
+    fn security_policy_returns_empty_when_no_rule_matches() {
+        let svc = NamimadoService::new();
+        let r = svc.security_policy_for("example.com");
+        assert!(r.headers.is_empty());
+        assert!(r.policy_name.is_none());
+    }
+
+    #[test]
+    fn storage_range_on_unknown_store_is_none() {
+        let svc = NamimadoService::new();
+        assert!(svc
+            .storage_by_index_range("nope", "anything", "a", "z")
+            .is_none());
     }
 
     #[test]

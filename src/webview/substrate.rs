@@ -39,8 +39,12 @@ use nami_core::extension::{
     ExtensionRegistry, ExtensionSpec, SignedExtension, Trustdb, VerificationError,
     VerificationStatus,
 };
+use nami_core::i18n::{MessageRegistry, MessageSpec};
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
+use nami_core::security_policy::{
+    PolicyHeaders, SecurityPolicyRegistry, SecurityPolicySpec,
+};
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
 use nami_core::storage::kv::{Store, StorageRegistry, StorageSpec};
@@ -136,6 +140,8 @@ pub struct SubstratePipeline {
     commands: CommandRegistry,
     binds: BindRegistry,
     omniboxes: OmniboxRegistry,
+    messages: MessageRegistry,
+    security_policies: SecurityPolicyRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
     storage_registry: StorageRegistry,
@@ -167,6 +173,8 @@ pub struct SubstratePipeline {
     command_names: Vec<String>,
     bind_chords: Vec<String>,
     omnibox_names: Vec<String>,
+    i18n_namespaces: Vec<String>,
+    security_policy_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -310,6 +318,26 @@ impl SubstratePipeline {
         }
         let trustdb = Arc::new(std::sync::Mutex::new(trustdb));
 
+        // i18n message bundles.
+        let message_specs: Vec<MessageSpec> =
+            nami_core::i18n::compile(&ext_src).unwrap_or_default();
+        let mut i18n_ns_set: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for s in &message_specs {
+            i18n_ns_set.insert(s.namespace.clone());
+        }
+        let i18n_namespaces: Vec<String> = i18n_ns_set.into_iter().collect();
+        let mut messages = MessageRegistry::new();
+        messages.extend(message_specs);
+
+        // Security policies.
+        let sp_specs: Vec<SecurityPolicySpec> =
+            nami_core::security_policy::compile(&ext_src).unwrap_or_default();
+        let security_policy_names: Vec<String> =
+            sp_specs.iter().map(|s| s.name.clone()).collect();
+        let mut security_policies = SecurityPolicyRegistry::new();
+        security_policies.extend(sp_specs);
+
         // Omnibox profiles — if none declared, register the built-in
         // default so /omnibox works out of the box.
         let omnibox_specs: Vec<OmniboxSpec> =
@@ -394,7 +422,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -416,6 +444,8 @@ impl SubstratePipeline {
             binds.len(),
             // Omnibox count is cheap to surface too.
             omniboxes.len(),
+            messages.len(),
+            security_policies.len(),
         );
 
         Self {
@@ -435,6 +465,8 @@ impl SubstratePipeline {
             commands,
             binds,
             omniboxes,
+            messages,
+            security_policies,
             wasm_agents,
             wasm_host,
             storage_registry,
@@ -461,7 +493,64 @@ impl SubstratePipeline {
             command_names,
             bind_chords,
             omnibox_names,
+            i18n_namespaces,
+            security_policy_names,
         }
+    }
+
+    /// Range scan over a declared secondary index.
+    #[must_use]
+    pub fn storage_by_index_range(
+        &self,
+        store: &str,
+        path: &str,
+        lo: &str,
+        hi: &str,
+    ) -> Option<Vec<(String, serde_json::Value)>> {
+        self.get_store(store)?.by_index_range(path, lo, hi)
+    }
+
+    /// i18n lookup. Returns the translated string or (per fallback chain)
+    /// the raw key.
+    #[must_use]
+    pub fn i18n_get(&self, namespace: &str, locale: &str, key: &str) -> String {
+        self.messages.get(namespace, locale, key)
+    }
+
+    /// i18n namespaces currently installed.
+    #[must_use]
+    pub fn i18n_namespaces(&self) -> &[String] {
+        &self.i18n_namespaces
+    }
+
+    /// Every locale present under `namespace`, sorted.
+    #[must_use]
+    pub fn i18n_locales(&self, namespace: &str) -> Vec<String> {
+        self.messages.locales_for(namespace)
+    }
+
+    /// Translation-coverage diagnostic — keys in :en missing from :locale.
+    #[must_use]
+    pub fn i18n_missing(&self, namespace: &str, locale: &str) -> Vec<String> {
+        self.messages.missing(namespace, locale)
+    }
+
+    /// Security-policy headers for `host`. Empty when no rule matches.
+    #[must_use]
+    pub fn security_policy_headers(&self, host: &str) -> PolicyHeaders {
+        self.security_policies.headers_for(host)
+    }
+
+    /// The matching SecurityPolicySpec for inspection.
+    #[must_use]
+    pub fn security_policy_for(&self, host: &str) -> Option<SecurityPolicySpec> {
+        self.security_policies.resolve(host).cloned()
+    }
+
+    /// Every installed security-policy's name.
+    #[must_use]
+    pub fn security_policy_names(&self) -> &[String] {
+        &self.security_policy_names
     }
 
     /// Rank autocomplete suggestions against `query`. Uses the named
@@ -742,6 +831,8 @@ impl SubstratePipeline {
             commands: self.command_names.clone(),
             binds: self.bind_chords.clone(),
             omniboxes: self.omnibox_names.clone(),
+            i18n: self.i18n_namespaces.clone(),
+            security_policies: self.security_policy_names.clone(),
         }
     }
 

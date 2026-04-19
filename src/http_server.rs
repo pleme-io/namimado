@@ -18,10 +18,11 @@ use tracing::info;
 use crate::api::{
     AddBookmarkRequest, ApiError, BookmarkInfo, CommandInfo, DispatchKeyRequest,
     DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
-    ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse,
-    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest, StorageSummary,
-    TrustdbKeyRequest, VerifyExtensionResponse,
+    ExtensionToggleRequest, HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest,
+    NavigateResponse, OmniboxResponse, ReaderResponse, ReloadResponse, ReportResponse,
+    RulesInventory, SecurityPolicyResponse, StateCellValue, StatusResponse, StorageEntry,
+    StorageIndexSummary, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
+    VerifyExtensionResponse,
 };
 use crate::service::NamimadoService;
 
@@ -59,6 +60,13 @@ pub fn router(service: NamimadoService) -> Router {
             "/storage/:name/index/:path",
             get(handle_storage_by_index),
         )
+        .route(
+            "/storage/:name/index/:path/range",
+            get(handle_storage_by_index_range),
+        )
+        .route("/i18n/:namespace", get(handle_i18n_get))
+        .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
+        .route("/security-policy", get(handle_security_policy))
         .route("/reader", get(handle_reader))
         .route(
             "/extensions",
@@ -429,6 +437,84 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct IndexRangeQuery {
+    #[serde(default)]
+    lo: Option<String>,
+    #[serde(default)]
+    hi: Option<String>,
+}
+
+async fn handle_storage_by_index_range(
+    State(svc): State<NamimadoService>,
+    Path((name, path)): Path<(String, String)>,
+    Query(q): Query<IndexRangeQuery>,
+) -> Result<Json<Vec<StorageEntry>>, ApiErrorResponse> {
+    let lo = q.lo.unwrap_or_default();
+    let hi = q.hi.unwrap_or_else(|| "\u{10FFFF}".into());
+    svc.storage_by_index_range(&name, &path, &lo, &hi)
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("storage_or_index_unknown")
+                    .with_detail(format!("{name}/{path}")),
+            )
+        })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct I18nQuery {
+    #[serde(default)]
+    locale: Option<String>,
+    #[serde(default)]
+    key: Option<String>,
+}
+
+async fn handle_i18n_get(
+    State(svc): State<NamimadoService>,
+    Path(namespace): Path<String>,
+    Query(q): Query<I18nQuery>,
+) -> Result<Json<I18nResponse>, ApiErrorResponse> {
+    let Some(key) = q.key else {
+        return Err(ApiErrorResponse(
+            StatusCode::BAD_REQUEST,
+            ApiError::new("missing_key").with_detail("GET /i18n/:ns requires ?key="),
+        ));
+    };
+    let locale = q.locale.unwrap_or_else(|| "en".into());
+    Ok(Json(svc.i18n_get(&namespace, &locale, &key)))
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct I18nCoverageQuery {
+    #[serde(default)]
+    locale: Option<String>,
+}
+
+async fn handle_i18n_coverage(
+    State(svc): State<NamimadoService>,
+    Path(namespace): Path<String>,
+    Query(q): Query<I18nCoverageQuery>,
+) -> Json<I18nCoverage> {
+    let locale = q.locale.unwrap_or_else(|| "en".into());
+    Json(svc.i18n_coverage(&namespace, &locale))
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct SecurityPolicyQuery {
+    #[serde(default)]
+    host: Option<String>,
+}
+
+async fn handle_security_policy(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<SecurityPolicyQuery>,
+) -> Json<SecurityPolicyResponse> {
+    let host = q.host.unwrap_or_default();
+    Json(svc.security_policy_for(&host))
 }
 
 async fn handle_extension_verify(

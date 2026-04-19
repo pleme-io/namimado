@@ -109,6 +109,34 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct StorageByIndexRangeRequest {
+    store: String,
+    path: String,
+    /// Inclusive lower bound. Empty = unbounded below.
+    lo: Option<String>,
+    /// Inclusive upper bound. Empty = unbounded above.
+    hi: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct I18nGetRequest {
+    namespace: String,
+    locale: Option<String>,
+    key: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct I18nCoverageRequest {
+    namespace: String,
+    locale: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SecurityPolicyRequest {
+    host: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct StorageByIndexRequest {
     store: String,
     /// Dot-path matching a declared (defstorage :indexes) entry.
@@ -666,6 +694,81 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(
+        description = "Range scan over a (defstorage) secondary index. \
+                       BTreeMap-backed, so O(log n + k). Inclusive bounds; \
+                       omit lo/hi for unbounded. Lexicographic comparison \
+                       — zero-pad numerics when you want numeric order."
+    )]
+    async fn storage_by_index_range(
+        &self,
+        Parameters(req): Parameters<StorageByIndexRangeRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let lo = req.lo.unwrap_or_default();
+        let hi = req.hi.unwrap_or_else(|| "\u{10FFFF}".into());
+        match self
+            .service
+            .storage_by_index_range(&req.store, &req.path, &lo, &hi)
+        {
+            Some(v) => Ok(ToolResponse::success(
+                &serde_json::to_value(&v).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(&format!(
+                "storage_or_index_unknown: {}/{}",
+                req.store, req.path
+            ))),
+        }
+    }
+
+    #[tool(
+        description = "Resolve a translated message. Fallback chain: exact \
+                       (namespace, locale) → locale-prefix (en-US → en) → \
+                       (namespace, \"en\") → raw key. Absorbs chrome.i18n."
+    )]
+    async fn i18n_get(
+        &self,
+        Parameters(req): Parameters<I18nGetRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let locale = req.locale.as_deref().unwrap_or("en");
+        let resp = self.service.i18n_get(&req.namespace, locale, &req.key);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Translation coverage — which locales exist for a \
+                       namespace, and which keys are missing from a target \
+                       locale relative to :en. The 'what's left to translate' \
+                       view."
+    )]
+    async fn i18n_coverage(
+        &self,
+        Parameters(req): Parameters<I18nCoverageRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let locale = req.locale.as_deref().unwrap_or("en");
+        let resp = self.service.i18n_coverage(&req.namespace, locale);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Security-policy headers for a host — resolves the \
+                       matching (defsecurity-policy) + renders the full \
+                       HTTP header set (CSP, Permissions-Policy, Referrer-\
+                       Policy, Cross-Origin-*, X-Frame-Options)."
+    )]
+    async fn security_policy(
+        &self,
+        Parameters(req): Parameters<SecurityPolicyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.service.security_policy_for(&req.host);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
     }
 
     #[tool(

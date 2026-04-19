@@ -191,6 +191,10 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("DELETE", "/storage/:name", "Delete one key from a store (`?key=…`)."),
         mk("GET", "/storage/:name/index", "List declared indexes + distinct projected values."),
         mk("GET", "/storage/:name/index/:path", "Entries whose value at `path` equals `?value=…` (O(log n))."),
+        mk("GET", "/storage/:name/index/:path/range", "Range scan over a secondary index (`?lo=&hi=`, inclusive)."),
+        mk("GET", "/i18n/:namespace", "Resolve one translated message (`?locale=&key=`); applies fallback chain."),
+        mk("GET", "/i18n/:namespace/coverage", "Translation coverage — available locales + missing keys vs :en."),
+        mk("GET", "/security-policy", "Render per-host security-policy headers (`?host=…`) via (defsecurity-policy)."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -238,6 +242,10 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("storage_delete", "Delete one key from a store."),
         mk("storage_index_list", "Declared secondary indexes + distinct values."),
         mk("storage_by_index", "O(log n) entry lookup by indexed projection."),
+        mk("storage_by_index_range", "Inclusive range scan over a secondary index."),
+        mk("i18n_get", "Resolve one translated message with fallback chain."),
+        mk("i18n_coverage", "Translation coverage — locales + missing keys."),
+        mk("security_policy", "Per-host security-policy headers (CSP + Permissions-Policy + more)."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -361,6 +369,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 21, "21 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 23, "23 DSL keywords expected in nami-core");
     }
 }
