@@ -185,7 +185,7 @@ impl NamimadoConfig {
             Ok(path) => {
                 info!(path = %path.display(), "loading config via shikumi");
                 match shikumi::ConfigStore::<Self>::load(&path, "NAMIMADO_") {
-                    Ok(store) => store.get().clone(),
+                    Ok(store) => (**store.get()).clone(),
                     Err(e) => {
                         warn!(error = %e, "failed to load config — using defaults");
                         Self::default()

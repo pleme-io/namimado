@@ -10,14 +10,15 @@ repository = "https://github.com/pleme-io/namimado"
 [features]
 default = []
 full = ["browser-core", "gpu-chrome"]
-# nami-core repo does not exist yet — uncomment when created
-# browser-core = ["dep:nami-core"]
-browser-core = []
+browser-core = ["dep:nami-core", "dep:reqwest"]
 gpu-chrome = ["dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi"]
 
 [dependencies]
-# Browser core (shared with aranami) — repo not yet created
-# nami-core = { git = "https://github.com/pleme-io/nami-core", optional = true }
+# Browser core (shared with aranami) — DOM + CSS + layout + Lisp substrate.
+# Pulls in the 12 def* DSLs: transforms, scrape, alias, plan, predicate,
+# agent, state, effect, derived, query, route, component.
+nami-core = { git = "ssh://git@github.com/pleme-io/nami-core", branch = "main", features = ["lisp", "eval"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 
 # GPU browser chrome
 garasu = { git = "https://github.com/pleme-io/garasu", optional = true }
