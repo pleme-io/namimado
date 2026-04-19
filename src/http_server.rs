@@ -33,6 +33,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/dom", get(handle_dom))
         .route("/rules", get(handle_rules))
         .route("/reload", post(handle_reload))
+        .route("/typescape", get(handle_typescape))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -97,6 +98,10 @@ async fn handle_state(State(svc): State<NamimadoService>) -> Json<Vec<StateCellV
 
 async fn handle_rules(State(svc): State<NamimadoService>) -> Json<RulesInventory> {
     Json(svc.rules_inventory())
+}
+
+async fn handle_typescape() -> Json<crate::typescape::NamimadoTypescape> {
+    Json(crate::typescape::typescape())
 }
 
 async fn handle_reload(

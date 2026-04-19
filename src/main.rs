@@ -13,6 +13,7 @@ mod mcp;
 mod render;
 mod scripting;
 mod service;
+mod typescape;
 mod webview;
 
 use clap::Parser;

@@ -230,6 +230,21 @@ impl NamimadoMcpServer {
     }
 
     #[tool(
+        description = "Self-describing typescape — the arch-synthesizer leaf \
+                       manifest for nami. Every DSL keyword, AST domain, \
+                       canonical n-* tag, WASM host API, shipped normalize \
+                       pack, HTTP endpoint, MCP tool. BLAKE3-attested. Use \
+                       this instead of scraping source code to understand \
+                       what the binary does. Same payload as GET /typescape."
+    )]
+    async fn get_typescape(&self) -> Result<CallToolResult, McpError> {
+        let ts = crate::typescape::typescape();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&ts).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
         description = "Re-scan ~/.config/namimado/{extensions,transforms,aliases}.lisp \
                        + substrate.d/*.lisp and swap in a fresh pipeline. State \
                        store resets to the new (defstate) seeds. Use after editing \
