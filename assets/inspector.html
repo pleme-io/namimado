@@ -155,6 +155,11 @@
     <h2>page body <span class="count" id="body-count">—</span></h2>
     <pre id="body">(no navigate yet)</pre>
   </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>dom · lisp space <span class="count" id="dom-count">—</span></h2>
+    <pre id="dom" style="color:var(--nord-13)">(no navigate yet — this is the page absorbed into s-expressions)</pre>
+  </section>
 </main>
 
 <div class="status-bar">
@@ -279,6 +284,9 @@ $('nav').addEventListener('submit', async (ev) => {
     const body = resp.text_render || '';
     $('body').textContent = body || '(empty)';
     $('body-count').textContent = `${body.length}c`;
+    const sexp = resp.dom_sexp || '';
+    $('dom').textContent = sexp || '(empty)';
+    $('dom-count').textContent = `${sexp.length}c`;
     await refreshAll();
   } catch (e) {
     $('status').innerHTML = `<span class="err">${e.message}</span>`;

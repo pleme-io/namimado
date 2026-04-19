@@ -229,6 +229,21 @@ impl NamimadoMcpServer {
         ))
     }
 
+    #[tool(
+        description = "The last navigated page absorbed into Lisp space — full DOM \
+                       rendered as S-expressions, depth-capped at 8 levels. This is \
+                       what `(defdom-transform …)`, `(defscrape …)`, and agents \
+                       reason over. Same payload as GET /dom."
+    )]
+    async fn get_dom_sexp(&self) -> Result<CallToolResult, McpError> {
+        match self.service.last_dom_sexp() {
+            Some(sexp) => Ok(ToolResponse::text(&sexp)),
+            None => Ok(ToolResponse::error(
+                "no_navigate_yet: call the navigate tool first",
+            )),
+        }
+    }
+
     #[tool(description = "List all open tabs with their URLs and titles.")]
     async fn list_tabs(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(&serde_json::json!({

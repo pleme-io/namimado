@@ -98,6 +98,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /dom:
+    get:
+      tags: [observe]
+      summary: Last navigated DOM as an S-expression.
+      description: |
+        Returns the post-transform DOM **absorbed into Lisp space** —
+        a pretty-printed S-expression string. Depth-capped server-side
+        at 8 nesting levels; deeper subtrees collapse to
+        `(… :elided N)`.
+      operationId: getDomSexp
+      responses:
+        '200':
+          description: DOM as Lisp
+          content:
+            text/plain: { schema: { type: string } }
+        '404':
+          description: No navigate has happened yet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
   /state:
     get:
       tags: [observe]
@@ -176,6 +197,12 @@ components:
             Post-transform plain-text render of the page body —
             concatenated text nodes in document order. What the
             GPU window / inspector panel displays as the "page".
+        dom_sexp:
+          type: string
+          description: |
+            Post-transform DOM rendered as S-expressions — the page
+            **absorbed into Lisp space**. Depth-capped at 8 levels;
+            deeper subtrees collapse to `(… :elided N)`.
         report: { $ref: '#/components/schemas/ReportResponse' }
 
     ReportResponse:

@@ -45,6 +45,11 @@ pub struct NavigateResponse {
     /// the native GPU window shows in the left pane; the HTTP /ui
     /// panel also surfaces it.
     pub text_render: String,
+    /// The post-transform DOM rendered as S-expressions. This is the
+    /// page **absorbed into Lisp space** — suitable for further
+    /// programmatic processing via tatara-lisp, or for inspection.
+    /// Depth-capped server-side.
+    pub dom_sexp: String,
     pub report: ReportResponse,
 }
 
@@ -57,6 +62,7 @@ impl NavigateResponse {
             fetched_bytes: o.fetched_bytes,
             title: o.title.clone(),
             text_render: o.text_render.clone(),
+            dom_sexp: o.dom_sexp.clone(),
             report: ReportResponse::from_outcome(o),
         }
     }

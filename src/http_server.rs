@@ -27,6 +27,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/navigate", post(handle_navigate))
         .route("/report", get(handle_report))
         .route("/state", get(handle_state))
+        .route("/dom", get(handle_dom))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -87,6 +88,20 @@ async fn handle_report(
 
 async fn handle_state(State(svc): State<NamimadoService>) -> Json<Vec<StateCellValue>> {
     Json(svc.state_snapshot())
+}
+
+async fn handle_dom(State(svc): State<NamimadoService>) -> Result<Response, ApiErrorResponse> {
+    match svc.last_dom_sexp() {
+        Some(sexp) => Ok((
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            sexp,
+        )
+            .into_response()),
+        None => Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_navigate_yet").with_detail("call POST /navigate first"),
+        )),
+    }
 }
 
 async fn handle_openapi_yaml() -> impl IntoResponse {

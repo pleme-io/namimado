@@ -65,6 +65,10 @@ pub struct NavigateOutcome {
     pub fetched_bytes: usize,
     pub title: Option<String>,
     pub text_render: String,
+    /// Post-transform DOM as an S-expression — the page absorbed into
+    /// Lisp space. Depth-capped at 8 by default so deeply-nested app
+    /// shells don't explode the payload.
+    pub dom_sexp: String,
     pub report: SubstrateReport,
 }
 
@@ -316,12 +320,21 @@ impl SubstratePipeline {
 
         let title = doc.title();
         let text_render = visible_text(&doc);
+        let dom_sexp = nami_core::lisp::dom_to_sexp_with(
+            &doc,
+            &nami_core::lisp::SexpOptions {
+                depth_cap: Some(8),
+                pretty: true,
+                trim_whitespace: true,
+            },
+        );
 
         Ok(NavigateOutcome {
             final_url: url.clone(),
             fetched_bytes: body.len(),
             title,
             text_render,
+            dom_sexp,
             report,
         })
     }

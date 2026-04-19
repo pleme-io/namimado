@@ -49,8 +49,18 @@ pub struct GpuApp {
     body_text: String,
     /// Right pane — structured substrate inspector lines.
     inspector_text: String,
+    /// Right pane alt — page as S-expression (Lisp space).
+    dom_sexp: String,
+    /// Which right-pane view is active.
+    right_view: RightView,
     /// Page title shown above the body.
     page_title: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RightView {
+    Substrate,
+    Dom,
 }
 
 impl GpuApp {
@@ -70,9 +80,11 @@ impl GpuApp {
             text: None,
             size: PhysicalSize::new(1280, 800),
             url_input,
-            status: "type a URL, press enter · Esc to quit".to_owned(),
+            status: "type a URL, press enter · Tab toggles dom·lisp · Esc quits".to_owned(),
             body_text: String::new(),
             inspector_text: String::new(),
+            dom_sexp: String::new(),
+            right_view: RightView::Substrate,
             page_title: String::new(),
         }
     }
@@ -95,6 +107,7 @@ impl GpuApp {
                 self.page_title = resp.title.clone().unwrap_or_default();
                 self.body_text = clean_body(&resp.text_render);
                 self.inspector_text = format_inspector(&resp);
+                self.dom_sexp = resp.dom_sexp.clone();
             }
             Err(e) => {
                 self.status = format!("error: {e}");
@@ -194,6 +207,15 @@ impl ApplicationHandler for GpuApp {
             } => match logical_key {
                 Key::Named(NamedKey::Escape) => event_loop.exit(),
                 Key::Named(NamedKey::Enter) => self.submit_navigate(),
+                Key::Named(NamedKey::Tab) => {
+                    self.right_view = match self.right_view {
+                        RightView::Substrate => RightView::Dom,
+                        RightView::Dom => RightView::Substrate,
+                    };
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
                 Key::Named(NamedKey::Backspace) => {
                     self.url_input.pop();
                     if let Some(w) = &self.window {
@@ -272,11 +294,23 @@ impl GpuApp {
         let mut body_buffer = text.create_buffer(&body, 14.0, 20.0);
         configure_buffer(&mut body_buffer, &mut text.font_system, left_w, content_h);
 
-        // Right pane — inspector.
-        let insp = if self.inspector_text.is_empty() {
-            "substrate inspector\n───────────────\n(awaiting navigate)".to_owned()
-        } else {
-            self.inspector_text.clone()
+        // Right pane — switchable between substrate inspector and
+        // DOM-as-sexp (Tab toggles).
+        let insp = match self.right_view {
+            RightView::Substrate => {
+                if self.inspector_text.is_empty() {
+                    "substrate inspector\n───────────────\n(awaiting navigate)\n\n(Tab → dom·lisp)".to_owned()
+                } else {
+                    format!("{}\n\n(Tab → dom·lisp)", self.inspector_text)
+                }
+            }
+            RightView::Dom => {
+                if self.dom_sexp.is_empty() {
+                    "dom · lisp space\n────────────────\n(awaiting navigate)\n\n(Tab → substrate)".to_owned()
+                } else {
+                    format!("dom · lisp space\n────────────────\n{}\n\n(Tab → substrate)", self.dom_sexp)
+                }
+            }
         };
         let mut insp_buffer = text.create_buffer(&insp, 13.0, 18.0);
         configure_buffer(&mut insp_buffer, &mut text.font_system, right_w, content_h);

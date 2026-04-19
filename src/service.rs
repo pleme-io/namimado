@@ -108,6 +108,18 @@ impl NamimadoService {
         None
     }
 
+    /// GET /dom — last navigated page as S-expression (Lisp space).
+    pub fn last_dom_sexp(&self) -> Option<String> {
+        #[cfg(feature = "browser-core")]
+        {
+            let inner = self.inner.lock().expect("service mutex poisoned");
+            return inner.last_outcome.as_ref().map(|o| o.dom_sexp.clone());
+        }
+
+        #[cfg(not(feature = "browser-core"))]
+        None
+    }
+
     /// GET /state — current state store snapshot (across all navigates).
     pub fn state_snapshot(&self) -> Vec<StateCellValue> {
         #[cfg(feature = "browser-core")]
