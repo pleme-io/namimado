@@ -21,6 +21,7 @@ const PACK_FILES: &[&str] = &[
     "mui.lisp",
     "bootstrap.lisp",
     "tailwind.lisp",
+    "blocker-trackers.lisp",
 ];
 
 /// namimado typescape — namimado's dimensions plus the embedded
@@ -61,6 +62,8 @@ pub enum PackKind {
     Inbound,
     /// Outbound: canonical `n-*` → framework-specific shape.
     Emit,
+    /// Content blocking: domain + selector rules stripping trackers.
+    Blocker,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -144,6 +147,7 @@ fn normalize_packs() -> Vec<NormalizePackInfo> {
             "mui.lisp" => mk(f, PackKind::Inbound, "MUI component root classes → n-*"),
             "bootstrap.lisp" => mk(f, PackKind::Inbound, "Bootstrap component classes → n-*"),
             "tailwind.lisp" => mk(f, PackKind::Inbound, "Tailwind utility-class patterns → n-*"),
+            "blocker-trackers.lisp" => mk(f, PackKind::Blocker, "Third-party trackers + ad-network blocklist"),
             _ => mk(f, PackKind::Inbound, "(undocumented)"),
         })
         .collect();
@@ -252,13 +256,19 @@ mod tests {
 
     #[test]
     fn pack_kind_matches_filename_convention() {
-        // Inbound packs do NOT end in -emit.lisp; emit packs DO.
+        // Inbound packs do NOT end in -emit.lisp and aren't blocker-*.
+        // Emit packs end in -emit.lisp. Blocker packs start with blocker-*.
         let ts = typescape();
         for pack in &ts.normalize_packs {
             let is_emit = pack.file.ends_with("-emit.lisp");
+            let is_blocker = pack.file.starts_with("blocker-");
             match pack.kind {
                 PackKind::Emit => assert!(is_emit, "pack {} marked Emit but not -emit.lisp", pack.file),
-                PackKind::Inbound => assert!(!is_emit, "pack {} marked Inbound but ends in -emit.lisp", pack.file),
+                PackKind::Blocker => assert!(is_blocker, "pack {} marked Blocker but not blocker-*", pack.file),
+                PackKind::Inbound => {
+                    assert!(!is_emit, "pack {} marked Inbound but ends in -emit.lisp", pack.file);
+                    assert!(!is_blocker, "pack {} marked Inbound but starts with blocker-", pack.file);
+                }
             }
         }
     }
@@ -301,6 +311,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 14, "14 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 15, "15 DSL keywords expected in nami-core");
     }
 }

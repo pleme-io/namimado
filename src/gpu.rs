@@ -516,6 +516,10 @@ fn format_inspector(resp: &crate::api::NavigateResponse) -> String {
     for hit in r.wasm_agent_hits.iter().take(10) {
         out.push_str(&format!("  · {hit}\n"));
     }
+    out.push_str(&format!("blocker     {}\n", r.blocker_applied));
+    for hit in r.blocker_hits.iter().take(10) {
+        out.push_str(&format!("  · {hit}\n"));
+    }
     if let Some(route) = &r.routes_matched {
         out.push_str(&format!("route       {route}\n"));
     }

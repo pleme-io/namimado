@@ -33,6 +33,7 @@ use nami_core::component::ComponentRegistry;
 use nami_core::derived::DerivedRegistry;
 use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
+use nami_core::blocker::{BlockerRegistry, BlockerSpec};
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
 use nami_core::wasm::{WasmAgentContext, WasmHost};
@@ -71,6 +72,9 @@ pub struct SubstrateReport {
     /// `"name → N bytes (fuel=F ms=M)"`.
     pub wasm_agents_fired: usize,
     pub wasm_agent_hits: Vec<String>,
+    /// Elements stripped by `(defblocker …)` rules this navigate.
+    pub blocker_applied: usize,
+    pub blocker_hits: Vec<String>,
 }
 
 /// The outcome of navigating to a URL.
@@ -100,6 +104,7 @@ pub struct SubstratePipeline {
     derived: DerivedRegistry,
     components: ComponentRegistry,
     normalize_rules: NormalizeRegistry,
+    blockers: BlockerRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
 
@@ -122,6 +127,7 @@ pub struct SubstratePipeline {
     normalize_names: Vec<String>,
     alias_names: Vec<String>,
     wasm_agent_names: Vec<String>,
+    blocker_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -211,6 +217,12 @@ impl SubstratePipeline {
         let mut normalize_rules = NormalizeRegistry::new();
         normalize_rules.extend(normalize_specs);
 
+        let blocker_specs: Vec<BlockerSpec> =
+            nami_core::blocker::compile(&ext_src).unwrap_or_default();
+        let blocker_names: Vec<String> = blocker_specs.iter().map(|s| s.name.clone()).collect();
+        let mut blockers = BlockerRegistry::new();
+        blockers.extend(blocker_specs);
+
         let wasm_agent_specs: Vec<WasmAgentSpec> =
             nami_core::wasm_agent::compile(&ext_src).unwrap_or_default();
         let wasm_agent_names: Vec<String> =
@@ -248,7 +260,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -262,6 +274,7 @@ impl SubstratePipeline {
             aliases.len(),
             normalize_rules.len(),
             wasm_agents.len(),
+            blockers.len(),
         );
 
         Self {
@@ -274,6 +287,7 @@ impl SubstratePipeline {
             derived,
             components,
             normalize_rules,
+            blockers,
             wasm_agents,
             wasm_host,
             transforms,
@@ -291,6 +305,7 @@ impl SubstratePipeline {
             normalize_names,
             alias_names,
             wasm_agent_names,
+            blocker_names,
         }
     }
 
@@ -319,6 +334,7 @@ impl SubstratePipeline {
             transforms: self.transforms.iter().map(|s| s.name.clone()).collect(),
             aliases: self.alias_names.clone(),
             wasm_agents: self.wasm_agent_names.clone(),
+            blockers: self.blocker_names.clone(),
         }
     }
 
@@ -349,6 +365,17 @@ impl SubstratePipeline {
             .hits
             .iter()
             .map(|h| format!("{} : {} → {}", h.rule, h.from_tag, h.to_tag))
+            .collect();
+
+        // Phase 0.3 — content blocking. Runs after canonicalization
+        // so rules can target the canonical n-* shape and fire
+        // uniformly across frameworks.
+        let block_report = nami_core::blocker::apply(&mut doc, &self.blockers);
+        report.blocker_applied = block_report.applied();
+        report.blocker_hits = block_report
+            .hits
+            .iter()
+            .map(|h| format!("{} : {} <{}>", h.rule, h.selector, h.tag))
             .collect();
 
         // Phase 0.4 — dispatch (defwasm-agent) scrapers. Each runs
@@ -538,6 +565,12 @@ impl SubstratePipeline {
         let scheme = url.scheme();
         if scheme != "http" && scheme != "https" {
             return Err(anyhow!("unsupported scheme: {scheme}"));
+        }
+        // Outbound block check — uBlock-style pre-fetch gating. A
+        // match refuses the navigate with the blocking rule name so
+        // agents / users can tell *why*.
+        if let Some(hit) = self.blockers.block_url(url.as_str()) {
+            return Err(anyhow!("blocked by defblocker rule {:?}", hit.name));
         }
         let resp = self
             .http

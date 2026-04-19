@@ -39,6 +39,14 @@ fn every_shipped_pack_compiles_cleanly() {
     let packs = packs();
     assert!(!packs.is_empty(), "no packs discovered under examples/normalize-packs/");
     for (name, src) in &packs {
+        // Blocker packs compile through blocker::compile, not
+        // normalize::compile. Route by filename prefix.
+        if name.starts_with("blocker-") {
+            let specs = nami_core::blocker::compile(src)
+                .unwrap_or_else(|e| panic!("blocker pack {name} failed to compile: {e}"));
+            assert!(!specs.is_empty(), "blocker pack {name} produced zero specs");
+            continue;
+        }
         match nami_core::normalize::compile(src) {
             Ok(specs) => {
                 assert!(
@@ -68,13 +76,24 @@ fn every_shipped_pack_compiles_cleanly() {
 #[test]
 fn pack_rule_names_are_unique_within_pack() {
     for (name, src) in packs() {
-        let specs = nami_core::normalize::compile(&src).expect("compile");
+        let names: Vec<String> = if name.starts_with("blocker-") {
+            nami_core::blocker::compile(&src)
+                .expect("compile")
+                .into_iter()
+                .map(|s| s.name)
+                .collect()
+        } else {
+            nami_core::normalize::compile(&src)
+                .expect("compile")
+                .into_iter()
+                .map(|s| s.name)
+                .collect()
+        };
         let mut seen = std::collections::HashSet::new();
-        for spec in &specs {
+        for n in &names {
             assert!(
-                seen.insert(spec.name.clone()),
-                "pack {name} has duplicate rule name: {}",
-                spec.name
+                seen.insert(n.clone()),
+                "pack {name} has duplicate rule name: {n}",
             );
         }
     }
@@ -87,6 +106,9 @@ fn emit_packs_target_tags_without_n_prefix() {
     // (which is the canonical prefix).
     for (name, src) in packs() {
         if !name.ends_with("-emit.lisp") {
+            continue;
+        }
+        if name.starts_with("blocker-") {
             continue;
         }
         let specs = nami_core::normalize::compile(&src).expect("compile");
@@ -115,6 +137,9 @@ fn inbound_packs_target_canonical_n_prefix() {
     // fragments the downstream tooling surface.
     for (name, src) in packs() {
         if name.ends_with("-emit.lisp") {
+            continue;
+        }
+        if name.starts_with("blocker-") {
             continue;
         }
         let specs = nami_core::normalize::compile(&src).expect("compile");

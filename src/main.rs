@@ -198,6 +198,10 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
     for hit in &r.wasm_agent_hits {
         println!("  · {hit}");
     }
+    println!("blocker:        {} applied", r.blocker_applied);
+    for hit in &r.blocker_hits {
+        println!("  · {hit}");
+    }
     for hit in &r.transform_hits {
         println!("  • {hit}");
     }
