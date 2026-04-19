@@ -160,6 +160,15 @@
     <h2>dom · lisp space <span class="count" id="dom-count">—</span></h2>
     <pre id="dom" style="color:var(--nord-13)">(no navigate yet — this is the page absorbed into s-expressions)</pre>
   </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>typescape <span class="count" id="ts-hash">—</span></h2>
+    <dl class="kv body" id="ts-summary"></dl>
+    <details style="padding:0 0.75rem 0.75rem">
+      <summary style="cursor:pointer;color:var(--nord-8);font-size:0.85rem">full manifest JSON</summary>
+      <pre id="ts-json" style="color:var(--nord-14);max-height:400px">—</pre>
+    </details>
+  </section>
 </main>
 
 <div class="status-bar">
@@ -254,9 +263,35 @@ async function refreshReport() {
   $('derived-count').textContent = String(derived.length);
 }
 
+async function refreshTypescape() {
+  try {
+    const ts = await getJSON('/typescape');
+    $('ts-hash').textContent = ts.hash;
+    const dims = [
+      ['name', ts.name],
+      ['version', ts.version],
+      ['hash', ts.hash],
+      ['features', (ts.features || []).join(', ')],
+      ['normalize packs', `${(ts.normalize_packs || []).length}`],
+      ['http endpoints', `${(ts.http_endpoints || []).length}`],
+      ['mcp tools', `${(ts.mcp_tools || []).length}`],
+    ];
+    if (ts.nami_core && ts.nami_core.dsl_keywords) {
+      dims.push(['nami-core dsls',         `${ts.nami_core.dsl_keywords.length}`]);
+      dims.push(['nami-core ast domains',  `${ts.nami_core.ast_domains.length}`]);
+      dims.push(['nami-core canonical',    `${ts.nami_core.canonical_vocab.length}`]);
+      dims.push(['nami-core host apis',    `${ts.nami_core.host_apis.length}`]);
+    }
+    renderKv($('ts-summary'), dims);
+    $('ts-json').textContent = JSON.stringify(ts, null, 2);
+  } catch (e) {
+    $('ts-summary').innerHTML = `<dd class="empty">${e.message}</dd>`;
+  }
+}
+
 async function refreshAll() {
   try {
-    await Promise.all([refreshStatus(), refreshState(), refreshReport()]);
+    await Promise.all([refreshStatus(), refreshState(), refreshReport(), refreshTypescape()]);
     $('status').innerHTML = `<span class="ok">ok</span> · last tick ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     $('status').innerHTML = `<span class="err">${e.message}</span>`;

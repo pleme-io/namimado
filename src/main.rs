@@ -52,6 +52,18 @@ enum Commands {
     /// smoke-testing `~/.config/namimado/*.lisp` without the GUI.
     #[cfg(feature = "browser-core")]
     Navigate { url: String },
+    /// Print the self-describing typescape manifest — every DSL
+    /// keyword, AST domain, canonical `n-*` tag, WASM host API,
+    /// shipped normalize pack, HTTP endpoint, MCP tool. BLAKE3-
+    /// attested. Useful for CI coherence checks and for agents
+    /// browsing what this binary can do.
+    Typescape {
+        /// Output format. `json` is the default (same payload as
+        /// GET /typescape). `yaml` emits the arch-synthesizer
+        /// Merkle-aggregator format.
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -88,6 +100,34 @@ fn main() -> anyhow::Result<()> {
         }
         #[cfg(feature = "browser-core")]
         Some(Commands::Navigate { url }) => run_headless_navigate(&url),
+        Some(Commands::Typescape { format }) => {
+            let ts = crate::typescape::typescape();
+            match format.as_str() {
+                "yaml" => {
+                    // Emit the arch-synthesizer aggregator format for
+                    // the nami-core leaf + a namimado summary on top.
+                    #[cfg(feature = "browser-core")]
+                    {
+                        println!("{}", nami_core::typescape::manifest_yaml());
+                        println!("# ─ namimado composition ──────────────────");
+                    }
+                    println!("namimado:");
+                    println!("  name: {:?}", ts.name);
+                    println!("  version: {:?}", ts.version);
+                    println!("  hash: {:?}", ts.hash);
+                    println!("  normalize_packs: {}", ts.normalize_packs.len());
+                    println!("  http_endpoints:  {}", ts.http_endpoints.len());
+                    println!("  mcp_tools:       {}", ts.mcp_tools.len());
+                    println!("  features:        {:?}", ts.features);
+                }
+                _ => {
+                    let json = serde_json::to_string_pretty(&ts)
+                        .unwrap_or_else(|e| format!("{{\"error\":{e:?}}}"));
+                    println!("{json}");
+                }
+            }
+            Ok(())
+        }
         None => run_default(&cli.url, cli.devtools),
     }
 }
