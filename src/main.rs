@@ -1,3 +1,11 @@
+// Scaffolding APIs (tab manager, bookmark/history/download state,
+// chrome widgets, scripting hooks, IPC bridge) are kept as reserved
+// surface for the full programmable-desktop-browser arc — the
+// current binary drives against service::NamimadoService via
+// HTTP / MCP / CLI / the GPU inspector pane. Silence dead_code so
+// the scaffolding doesn't drown out real diagnostics.
+#![allow(dead_code)]
+
 mod api;
 mod app;
 mod browser;

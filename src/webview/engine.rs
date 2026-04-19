@@ -20,7 +20,7 @@ use crate::ipc::bridge::IpcMessage;
 use super::substrate;
 
 #[cfg(feature = "browser-core")]
-pub use substrate::{NavigateOutcome, SubstrateReport};
+pub use substrate::NavigateOutcome;
 
 pub struct WebViewEngine {
     current_url: Url,
