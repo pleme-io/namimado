@@ -147,6 +147,27 @@ pub struct StateCellValue {
     pub value: Value,
 }
 
+/// Substrate rule inventory — what's loaded, by DSL keyword.
+///
+/// Useful for the inspector panel ("why didn't my rule fire?") and
+/// for MCP agents browsing the authoring surface. Counts match the
+/// startup log line; `names` gives quick identification.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct RulesInventory {
+    pub states: Vec<String>,
+    pub effects: Vec<String>,
+    pub predicates: Vec<String>,
+    pub plans: Vec<String>,
+    pub agents: Vec<String>,
+    pub routes: Vec<String>,
+    pub queries: Vec<String>,
+    pub derived: Vec<String>,
+    pub components: Vec<String>,
+    pub normalize_rules: Vec<String>,
+    pub transforms: Vec<String>,
+    pub aliases: Vec<String>,
+}
+
 /// Uniform error shape returned by every API surface.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ApiError {

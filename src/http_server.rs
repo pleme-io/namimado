@@ -14,7 +14,10 @@ use axum::{
 use std::net::SocketAddr;
 use tracing::info;
 
-use crate::api::{ApiError, NavigateRequest, NavigateResponse, ReportResponse, StateCellValue, StatusResponse};
+use crate::api::{
+    ApiError, NavigateRequest, NavigateResponse, ReportResponse, RulesInventory, StateCellValue,
+    StatusResponse,
+};
 use crate::service::NamimadoService;
 
 /// Assemble the full router. Exposed as a function so tests can mount
@@ -28,6 +31,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/report", get(handle_report))
         .route("/state", get(handle_state))
         .route("/dom", get(handle_dom))
+        .route("/rules", get(handle_rules))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -88,6 +92,10 @@ async fn handle_report(
 
 async fn handle_state(State(svc): State<NamimadoService>) -> Json<Vec<StateCellValue>> {
     Json(svc.state_snapshot())
+}
+
+async fn handle_rules(State(svc): State<NamimadoService>) -> Json<RulesInventory> {
+    Json(svc.rules_inventory())
 }
 
 async fn handle_dom(State(svc): State<NamimadoService>) -> Result<Response, ApiErrorResponse> {

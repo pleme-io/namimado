@@ -18,7 +18,10 @@ use anyhow::Result;
 use std::sync::{Arc, Mutex};
 use url::Url;
 
-use crate::api::{NavigateRequest, NavigateResponse, ReportResponse, StatusResponse, StateCellValue};
+use crate::api::{
+    NavigateRequest, NavigateResponse, ReportResponse, RulesInventory, StatusResponse,
+    StateCellValue,
+};
 
 #[cfg(feature = "browser-core")]
 use crate::webview::substrate::{NavigateOutcome, SubstratePipeline};
@@ -118,6 +121,17 @@ impl NamimadoService {
 
         #[cfg(not(feature = "browser-core"))]
         None
+    }
+
+    /// GET /rules — inventory of every loaded DSL form by name.
+    pub fn rules_inventory(&self) -> RulesInventory {
+        #[cfg(feature = "browser-core")]
+        {
+            let inner = self.inner.lock().expect("service mutex poisoned");
+            return inner.pipeline.rules_inventory();
+        }
+        #[cfg(not(feature = "browser-core"))]
+        RulesInventory::default()
     }
 
     /// GET /state — current state store snapshot (across all navigates).

@@ -99,6 +99,19 @@ pub struct SubstratePipeline {
 
     state_store: StateStore,
     http: reqwest::blocking::Client,
+
+    // Name indexes for the /rules inventory surface. Populated at
+    // load time; registries themselves don't expose a uniform iter API.
+    effect_names: Vec<String>,
+    predicate_names: Vec<String>,
+    plan_names: Vec<String>,
+    agent_names: Vec<String>,
+    route_names: Vec<String>,
+    query_names: Vec<String>,
+    derived_names: Vec<String>,
+    component_names: Vec<String>,
+    normalize_names: Vec<String>,
+    alias_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -121,29 +134,79 @@ impl SubstratePipeline {
             .and_then(read_if_exists)
             .unwrap_or_default();
 
+        // Pick up any `.lisp` file dropped into `substrate.d/` so users
+        // can install rule packs without editing extensions.lisp.
+        // Files are read in sorted order for determinism; errors on any
+        // single file degrade to a warning + skip.
+        let drop_in_src = cfg_dir
+            .as_ref()
+            .map(|d| d.join("substrate.d"))
+            .map(load_drop_in_dir)
+            .unwrap_or_default();
+        let ext_src = if drop_in_src.is_empty() {
+            ext_src
+        } else {
+            format!("{ext_src}\n{drop_in_src}")
+        };
+
         let states = nami_core::store::compile(&ext_src).unwrap_or_default();
+
+        let effect_specs = nami_core::effect::compile(&ext_src).unwrap_or_default();
+        let effect_names: Vec<String> = effect_specs.iter().map(|s| s.name.clone()).collect();
         let mut effects = EffectRegistry::new();
-        effects.extend(nami_core::effect::compile(&ext_src).unwrap_or_default());
+        effects.extend(effect_specs);
+
+        let pred_specs = nami_core::predicate::compile(&ext_src).unwrap_or_default();
+        let predicate_names: Vec<String> = pred_specs.iter().map(|s| s.name.clone()).collect();
         let mut predicates = PredicateRegistry::new();
-        predicates.extend(nami_core::predicate::compile(&ext_src).unwrap_or_default());
+        predicates.extend(pred_specs);
+
+        let plan_specs = nami_core::plan::compile(&ext_src).unwrap_or_default();
+        let plan_names: Vec<String> = plan_specs.iter().map(|s| s.name.clone()).collect();
         let mut plans = PlanRegistry::new();
-        plans.extend(nami_core::plan::compile(&ext_src).unwrap_or_default());
+        plans.extend(plan_specs);
+
+        let agent_specs = nami_core::agent::compile(&ext_src).unwrap_or_default();
+        let agent_names: Vec<String> = agent_specs.iter().map(|s| s.name.clone()).collect();
         let mut agents = AgentRegistry::new();
-        agents.extend(nami_core::agent::compile(&ext_src).unwrap_or_default());
+        agents.extend(agent_specs);
+
+        let route_specs = nami_core::route::compile(&ext_src).unwrap_or_default();
+        let route_names: Vec<String> = route_specs
+            .iter()
+            .map(|s| s.name.clone().unwrap_or_else(|| s.pattern.clone()))
+            .collect();
         let mut routes = RouteRegistry::new();
-        routes.extend(nami_core::route::compile(&ext_src).unwrap_or_default());
+        routes.extend(route_specs);
+
+        let query_specs = nami_core::query::compile(&ext_src).unwrap_or_default();
+        let query_names: Vec<String> = query_specs.iter().map(|s| s.name.clone()).collect();
         let mut queries = QueryRegistry::new();
-        queries.extend(nami_core::query::compile(&ext_src).unwrap_or_default());
+        queries.extend(query_specs);
+
+        let derived_specs = nami_core::derived::compile(&ext_src).unwrap_or_default();
+        let derived_names: Vec<String> = derived_specs.iter().map(|s| s.name.clone()).collect();
         let mut derived = DerivedRegistry::new();
-        derived.extend(nami_core::derived::compile(&ext_src).unwrap_or_default());
+        derived.extend(derived_specs);
+
+        let component_specs = nami_core::component::compile(&ext_src).unwrap_or_default();
+        let component_names: Vec<String> =
+            component_specs.iter().map(|s| s.name.clone()).collect();
         let mut components = ComponentRegistry::new();
-        components.extend(nami_core::component::compile(&ext_src).unwrap_or_default());
+        components.extend(component_specs);
+
+        let normalize_specs = nami_core::normalize::compile(&ext_src).unwrap_or_default();
+        let normalize_names: Vec<String> =
+            normalize_specs.iter().map(|s| s.name.clone()).collect();
         let mut normalize_rules = NormalizeRegistry::new();
-        normalize_rules.extend(nami_core::normalize::compile(&ext_src).unwrap_or_default());
+        normalize_rules.extend(normalize_specs);
 
         let transforms = nami_core::transform::compile(&tfm_src).unwrap_or_default();
+
+        let alias_specs = nami_core::alias::compile(&alias_src).unwrap_or_default();
+        let alias_names: Vec<String> = alias_specs.iter().map(|s| s.name.clone()).collect();
         let mut aliases = AliasRegistry::new();
-        aliases.extend(nami_core::alias::compile(&alias_src).unwrap_or_default());
+        aliases.extend(alias_specs);
 
         let state_store = StateStore::from_specs(&states);
 
@@ -183,6 +246,16 @@ impl SubstratePipeline {
             aliases,
             state_store,
             http,
+            effect_names,
+            predicate_names,
+            plan_names,
+            agent_names,
+            route_names,
+            query_names,
+            derived_names,
+            component_names,
+            normalize_names,
+            alias_names,
         }
     }
 
@@ -191,6 +264,26 @@ impl SubstratePipeline {
     #[must_use]
     pub fn state_snapshot(&self) -> Vec<(String, Value)> {
         self.state_store.snapshot().into_iter().collect()
+    }
+
+    /// Inventory of every DSL form currently loaded, by name. Powers
+    /// the `/rules` endpoint and MCP `get_rules` tool.
+    #[must_use]
+    pub fn rules_inventory(&self) -> crate::api::RulesInventory {
+        crate::api::RulesInventory {
+            states: self.state_store.names(),
+            effects: self.effect_names.clone(),
+            predicates: self.predicate_names.clone(),
+            plans: self.plan_names.clone(),
+            agents: self.agent_names.clone(),
+            routes: self.route_names.clone(),
+            queries: self.query_names.clone(),
+            derived: self.derived_names.clone(),
+            components: self.component_names.clone(),
+            normalize_rules: self.normalize_names.clone(),
+            transforms: self.transforms.iter().map(|s| s.name.clone()).collect(),
+            aliases: self.alias_names.clone(),
+        }
     }
 
     pub fn navigate(&mut self, url: &Url) -> Result<NavigateOutcome> {
@@ -410,6 +503,35 @@ fn read_if_exists(path: &Path) -> Option<String> {
     }
 }
 
+/// Concatenate every `.lisp` file in `dir` (sorted). Returns "" when
+/// the directory is absent or empty. Malformed files log and skip.
+fn load_drop_in_dir(dir: PathBuf) -> String {
+    if !dir.is_dir() {
+        return String::new();
+    }
+    let mut entries: Vec<PathBuf> = match std::fs::read_dir(&dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("lisp"))
+            .collect(),
+        Err(_) => return String::new(),
+    };
+    entries.sort();
+    let mut out = String::new();
+    for path in entries {
+        match std::fs::read_to_string(&path) {
+            Ok(src) => {
+                info!("loading drop-in {:?}", path.file_name().unwrap_or_default());
+                out.push_str(&src);
+                out.push('\n');
+            }
+            Err(e) => warn!("failed to read {path:?}: {e}"),
+        }
+    }
+    out
+}
+
 /// Visible-text extraction — excludes `<script>`, `<style>`, `<noscript>`
 /// subtrees so the page body shown in the GUI / inspector UI reads like
 /// the actual content, not CSS and JS source. `Document::text_content()`
@@ -484,5 +606,40 @@ mod tests {
         assert_eq!(r.agents_fired, 0);
         assert_eq!(r.transforms_applied, 0);
         assert!(r.state_snapshot.is_empty());
+    }
+
+    #[test]
+    fn drop_in_dir_concatenates_lisp_files_in_sorted_order() {
+        // substrate.d/ auto-load should include every .lisp file, in
+        // deterministic sorted order.
+        let tmp = std::env::temp_dir().join(format!(
+            "namimado-drop-in-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("b.lisp"), ";; b\n").unwrap();
+        std::fs::write(tmp.join("a.lisp"), ";; a\n").unwrap();
+        std::fs::write(tmp.join("not-included.txt"), "nope").unwrap();
+
+        let out = load_drop_in_dir(tmp.clone());
+        // `a` file concatenates before `b` (sorted), .txt ignored.
+        assert!(out.contains(";; a"));
+        assert!(out.contains(";; b"));
+        assert!(!out.contains("nope"));
+        let a_pos = out.find(";; a").unwrap();
+        let b_pos = out.find(";; b").unwrap();
+        assert!(a_pos < b_pos, "sorted order violated");
+
+        std::fs::remove_dir_all(tmp).ok();
+    }
+
+    #[test]
+    fn drop_in_dir_absent_yields_empty_string() {
+        let tmp = std::env::temp_dir().join("namimado-no-such-dir-for-drop-in");
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert_eq!(load_drop_in_dir(tmp), "");
     }
 }

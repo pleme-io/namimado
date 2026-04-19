@@ -230,6 +230,20 @@ impl NamimadoMcpServer {
     }
 
     #[tool(
+        description = "Inventory of every DSL form currently loaded by the Lisp \
+                       substrate — states, effects, predicates, plans, agents, \
+                       routes, queries, derived, components, normalize_rules, \
+                       transforms, aliases. One array of names per DSL. Same \
+                       payload as GET /rules."
+    )]
+    async fn get_rules(&self) -> Result<CallToolResult, McpError> {
+        let inv = self.service.rules_inventory();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&inv).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
         description = "The last navigated page absorbed into Lisp space — full DOM \
                        rendered as S-expressions, depth-capped at 8 levels. This is \
                        what `(defdom-transform …)`, `(defscrape …)`, and agents \
