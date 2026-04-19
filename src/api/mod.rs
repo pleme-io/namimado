@@ -40,6 +40,11 @@ pub struct NavigateResponse {
     pub final_url: String,
     pub fetched_bytes: usize,
     pub title: Option<String>,
+    /// Post-transform plain-text render of the page body. Not layouted
+    /// — just concatenated text nodes in document order. This is what
+    /// the native GPU window shows in the left pane; the HTTP /ui
+    /// panel also surfaces it.
+    pub text_render: String,
     pub report: ReportResponse,
 }
 
@@ -51,6 +56,7 @@ impl NavigateResponse {
             final_url: o.final_url.to_string(),
             fetched_bytes: o.fetched_bytes,
             title: o.title.clone(),
+            text_render: o.text_render.clone(),
             report: ReportResponse::from_outcome(o),
         }
     }

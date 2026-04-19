@@ -45,7 +45,12 @@ pub struct GpuApp {
     size: PhysicalSize<u32>,
     url_input: String,
     status: String,
-    display_text: String,
+    /// Left pane — rendered page body text (nami-core's text_render).
+    body_text: String,
+    /// Right pane — structured substrate inspector lines.
+    inspector_text: String,
+    /// Page title shown above the body.
+    page_title: String,
 }
 
 impl GpuApp {
@@ -65,8 +70,10 @@ impl GpuApp {
             text: None,
             size: PhysicalSize::new(1280, 800),
             url_input,
-            status: "type a URL, press enter".to_owned(),
-            display_text: String::new(),
+            status: "type a URL, press enter · Esc to quit".to_owned(),
+            body_text: String::new(),
+            inspector_text: String::new(),
+            page_title: String::new(),
         }
     }
 
@@ -82,11 +89,12 @@ impl GpuApp {
         }) {
             Ok(resp) => {
                 self.status = format!(
-                    "ok · {}B · {}",
-                    resp.fetched_bytes,
-                    resp.title.as_deref().unwrap_or("—")
+                    "ok · {}B · {} effects · {} transforms",
+                    resp.fetched_bytes, resp.report.effects_fired, resp.report.transforms_applied,
                 );
-                self.display_text = format_report(&resp);
+                self.page_title = resp.title.clone().unwrap_or_default();
+                self.body_text = clean_body(&resp.text_render);
+                self.inspector_text = format_inspector(&resp);
             }
             Err(e) => {
                 self.status = format!("error: {e}");
@@ -224,79 +232,126 @@ impl GpuApp {
             return Ok(());
         }
 
-        // Prepare text buffers.
-        let addr_text = format!(
-            "{} {}",
-            if self.url_input.is_empty() {
-                "▸"
-            } else {
-                "▸"
-            },
-            if self.url_input.is_empty() {
-                "type a URL…"
-            } else {
-                self.url_input.as_str()
-            }
-        );
-        let status = self.status.clone();
-        let body = if self.display_text.is_empty() {
+        // Layout: top address bar (56px), bottom status bar (32px),
+        // middle split 60/40 between page body (left) and inspector
+        // (right) with a 24px gutter on each side + between panes.
+        const TOP: f32 = 56.0;
+        const BOTTOM: f32 = 32.0;
+        const GUTTER: f32 = 24.0;
+        let content_top = TOP + 16.0;
+        let content_bot = size.height as f32 - BOTTOM - 8.0;
+        let avail_w = size.width as f32 - GUTTER * 3.0;
+        let left_w = (avail_w * 0.60).max(200.0);
+        let right_w = avail_w - left_w;
+        let left_x = GUTTER;
+        let right_x = GUTTER + left_w + GUTTER;
+        let content_h = (content_bot - content_top).max(64.0);
+
+        // Address bar.
+        let addr_text = if self.url_input.is_empty() {
+            "▸ type a URL…".to_owned()
+        } else {
+            format!("▸ {}", self.url_input)
+        };
+        let addr_buffer = text.create_buffer(&addr_text, 20.0, 28.0);
+
+        // Title (above body).
+        let title = if self.page_title.is_empty() {
+            String::new()
+        } else {
+            format!("# {}", self.page_title)
+        };
+        let title_buffer = text.create_buffer(&title, 16.0, 22.0);
+
+        // Left pane — page body. Wrap to left_w.
+        let body = if self.body_text.is_empty() {
             "(no navigate yet — type a URL and press enter)".to_owned()
         } else {
-            self.display_text.clone()
+            self.body_text.clone()
         };
+        let mut body_buffer = text.create_buffer(&body, 14.0, 20.0);
+        configure_buffer(&mut body_buffer, &mut text.font_system, left_w, content_h);
 
-        let max_body_width = size.width.saturating_sub(48) as f32;
-        let addr_buffer = text.create_buffer(&addr_text, 18.0, 24.0);
-        let status_buffer = text.create_buffer(&status, 12.0, 16.0);
-        let body_buffer = text.create_buffer(&body, 14.0, 20.0);
-        // Set sizes so wrapping kicks in for the body.
-        configure_buffer(
-            &mut body_buffer.clone(),
-            &mut text.font_system,
-            max_body_width,
-            (size.height as f32) - 100.0,
-        );
+        // Right pane — inspector.
+        let insp = if self.inspector_text.is_empty() {
+            "substrate inspector\n───────────────\n(awaiting navigate)".to_owned()
+        } else {
+            self.inspector_text.clone()
+        };
+        let mut insp_buffer = text.create_buffer(&insp, 13.0, 18.0);
+        configure_buffer(&mut insp_buffer, &mut text.font_system, right_w, content_h);
+
+        // Status.
+        let status_buffer = text.create_buffer(&self.status, 12.0, 16.0);
 
         let addr_area = TextArea {
             buffer: &addr_buffer,
-            left: 24.0,
-            top: 18.0,
+            left: GUTTER,
+            top: 14.0,
             scale: 1.0,
             bounds: TextBounds {
                 left: 0,
                 top: 0,
                 right: size.width as i32,
-                bottom: 56,
+                bottom: TOP as i32,
             },
-            default_color: Color::rgb(236, 239, 244), // nord-6
+            default_color: Color::rgb(143, 188, 187), // nord-7
             custom_glyphs: &[],
         };
-        let status_area = TextArea {
-            buffer: &status_buffer,
-            left: 24.0,
-            top: size.height as f32 - 24.0,
+        let title_area = TextArea {
+            buffer: &title_buffer,
+            left: left_x,
+            top: TOP + 2.0,
             scale: 1.0,
             bounds: TextBounds {
                 left: 0,
-                top: size.height as i32 - 32,
-                right: size.width as i32,
-                bottom: size.height as i32,
+                top: TOP as i32,
+                right: (left_x + left_w) as i32,
+                bottom: content_top as i32 + 6,
             },
-            default_color: Color::rgb(163, 190, 140), // nord-14
+            default_color: Color::rgb(136, 192, 208), // nord-8
             custom_glyphs: &[],
         };
         let body_area = TextArea {
             buffer: &body_buffer,
-            left: 24.0,
-            top: 72.0,
+            left: left_x,
+            top: content_top,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: left_x as i32,
+                top: content_top as i32,
+                right: (left_x + left_w) as i32,
+                bottom: content_bot as i32,
+            },
+            default_color: Color::rgb(216, 222, 233), // nord-4
+            custom_glyphs: &[],
+        };
+        let insp_area = TextArea {
+            buffer: &insp_buffer,
+            left: right_x,
+            top: content_top,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: right_x as i32,
+                top: content_top as i32,
+                right: (right_x + right_w) as i32,
+                bottom: content_bot as i32,
+            },
+            default_color: Color::rgb(235, 203, 139), // nord-13
+            custom_glyphs: &[],
+        };
+        let status_area = TextArea {
+            buffer: &status_buffer,
+            left: GUTTER,
+            top: size.height as f32 - BOTTOM + 6.0,
             scale: 1.0,
             bounds: TextBounds {
                 left: 0,
-                top: 56,
+                top: size.height as i32 - BOTTOM as i32,
                 right: size.width as i32,
-                bottom: size.height as i32 - 32,
+                bottom: size.height as i32,
             },
-            default_color: Color::rgb(216, 222, 233), // nord-4
+            default_color: Color::rgb(163, 190, 140), // nord-14
             custom_glyphs: &[],
         };
 
@@ -305,7 +360,7 @@ impl GpuApp {
             &gpu.queue,
             size.width,
             size.height,
-            [addr_area, body_area, status_area],
+            [addr_area, title_area, body_area, insp_area, status_area],
         )?;
 
         let frame = match surface.get_current_texture() {
@@ -362,45 +417,86 @@ fn configure_buffer(
     buffer.shape_until_scroll(fs, false);
 }
 
-fn format_report(resp: &crate::api::NavigateResponse) -> String {
+/// Collapse runs of whitespace in nami-core's `text_render` so the
+/// page reads as paragraphs rather than a sea of `\n\n\n`. Preserves
+/// single blank lines as paragraph breaks.
+fn clean_body(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut prev_blank = false;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !prev_blank && !out.is_empty() {
+                out.push('\n');
+                prev_blank = true;
+            }
+        } else {
+            if !out.is_empty() && !prev_blank {
+                out.push(' ');
+            } else if prev_blank {
+                out.push('\n');
+            }
+            out.push_str(trimmed);
+            prev_blank = false;
+        }
+    }
+    out
+}
+
+fn format_inspector(resp: &crate::api::NavigateResponse) -> String {
     let r = &resp.report;
     let mut out = String::new();
-    out.push_str(&format!("URL     {}\n", resp.final_url));
-    out.push_str(&format!(
-        "TITLE   {}\n",
-        resp.title.as_deref().unwrap_or("—")
-    ));
-    out.push_str(&format!(
-        "BYTES   {}\n\n",
-        resp.fetched_bytes
-    ));
+    out.push_str("SUBSTRATE\n─────────\n");
+    out.push_str(&format!("effects     {}\n", r.effects_fired));
+    out.push_str(&format!("agents      {}\n", r.agents_fired));
+    out.push_str(&format!("transforms  {}\n", r.transforms_applied));
+    if let Some(route) = &r.routes_matched {
+        out.push_str(&format!("route       {route}\n"));
+    }
+    if !r.queries_dispatched.is_empty() {
+        out.push_str(&format!(
+            "queries     {}\n",
+            r.queries_dispatched.join(", ")
+        ));
+    }
+
     if !r.frameworks.is_empty() {
-        let fws: Vec<String> = r
-            .frameworks
-            .iter()
-            .map(|f| format!("{} ({:.0}%)", f.name, f.confidence * 100.0))
-            .collect();
-        out.push_str(&format!("FRAMEWORKS  {}\n", fws.join(", ")));
+        out.push_str("\nFRAMEWORKS\n──────────\n");
+        for f in &r.frameworks {
+            out.push_str(&format!("  {} ({:.0}%)\n", f.name, f.confidence * 100.0));
+        }
     }
-    out.push_str(&format!("EFFECTS     {} fired\n", r.effects_fired));
-    out.push_str(&format!("AGENTS      {} fired\n", r.agents_fired));
-    out.push_str(&format!("TRANSFORMS  {} applied\n", r.transforms_applied));
-    for hit in &r.transform_hits {
-        out.push_str(&format!("  · {hit}\n"));
+
+    if !r.transform_hits.is_empty() {
+        out.push_str("\nTRANSFORM HITS\n──────────────\n");
+        for hit in r.transform_hits.iter().take(20) {
+            out.push_str(&format!("  · {hit}\n"));
+        }
+        if r.transform_hits.len() > 20 {
+            out.push_str(&format!("  … +{} more\n", r.transform_hits.len() - 20));
+        }
     }
+
     if !r.state_snapshot.is_empty() {
-        out.push_str("\nSTATE CELLS\n");
+        out.push_str("\nSTATE CELLS\n───────────\n");
         for cell in &r.state_snapshot {
-            out.push_str(&format!("  {} = {}\n", cell.name, cell.value));
+            out.push_str(&format!("  {:<14} {}\n", cell.name, cell.value));
         }
     }
+
     if !r.derived_snapshot.is_empty() {
-        out.push_str("\nDERIVED\n");
+        out.push_str("\nDERIVED\n───────\n");
         for cell in &r.derived_snapshot {
-            out.push_str(&format!("  {} = {}\n", cell.name, cell.value));
+            out.push_str(&format!("  {:<14} {}\n", cell.name, cell.value));
         }
     }
-    let _ = Attrs::new().family(Family::Monospace).color(Color::rgb(136, 192, 208));
-    let _ = Shaping::Advanced;
+
+    // Reference so dead_code lint doesn't complain about the imports
+    // we kept for possible per-span coloring later.
+    let _ = (
+        Attrs::new().family(Family::Monospace),
+        Shaping::Advanced,
+        Color::rgb(136, 192, 208),
+    );
     out
 }

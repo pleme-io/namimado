@@ -150,6 +150,11 @@
     <h2>substrate pipeline <span class="count">—</span></h2>
     <dl class="kv body" id="pipeline"></dl>
   </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>page body <span class="count" id="body-count">—</span></h2>
+    <pre id="body">(no navigate yet)</pre>
+  </section>
 </main>
 
 <div class="status-bar">
@@ -271,6 +276,9 @@ $('nav').addEventListener('submit', async (ev) => {
       ['title', resp.title || '—'],
       ['bytes', resp.fetched_bytes],
     ]);
+    const body = resp.text_render || '';
+    $('body').textContent = body || '(empty)';
+    $('body-count').textContent = `${body.length}c`;
     await refreshAll();
   } catch (e) {
     $('status').innerHTML = `<span class="err">${e.message}</span>`;

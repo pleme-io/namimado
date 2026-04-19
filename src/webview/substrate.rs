@@ -315,7 +315,7 @@ impl SubstratePipeline {
         };
 
         let title = doc.title();
-        let text_render = doc.text_content();
+        let text_render = visible_text(&doc);
 
         Ok(NavigateOutcome {
             final_url: url.clone(),
@@ -361,6 +361,31 @@ fn read_if_exists(path: &Path) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Visible-text extraction — excludes `<script>`, `<style>`, `<noscript>`
+/// subtrees so the page body shown in the GUI / inspector UI reads like
+/// the actual content, not CSS and JS source. `Document::text_content()`
+/// concatenates everything indiscriminately; this variant walks the tree
+/// skipping non-content elements.
+fn visible_text(doc: &nami_core::dom::Document) -> String {
+    fn walk(node: &nami_core::dom::Node, out: &mut String) {
+        if let Some(el) = node.as_element() {
+            let tag = el.tag.to_ascii_lowercase();
+            if matches!(tag.as_str(), "script" | "style" | "noscript" | "template") {
+                return;
+            }
+        }
+        if let Some(t) = node.as_text() {
+            out.push_str(t);
+        }
+        for c in &node.children {
+            walk(c, out);
+        }
+    }
+    let mut out = String::new();
+    walk(&doc.root, &mut out);
+    out
 }
 
 /// Blocking reqwest adapter for nami-core's `Fetcher` trait.

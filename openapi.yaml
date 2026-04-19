@@ -165,11 +165,17 @@ components:
 
     NavigateResponse:
       type: object
-      required: [final_url, fetched_bytes, report]
+      required: [final_url, fetched_bytes, text_render, report]
       properties:
         final_url: { type: string, format: uri }
         fetched_bytes: { type: integer, minimum: 0 }
         title: { type: string, nullable: true }
+        text_render:
+          type: string
+          description: |
+            Post-transform plain-text render of the page body —
+            concatenated text nodes in document order. What the
+            GPU window / inspector panel displays as the "page".
         report: { $ref: '#/components/schemas/ReportResponse' }
 
     ReportResponse:
