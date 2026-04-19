@@ -36,6 +36,7 @@ use nami_core::effect::EffectRegistry;
 use nami_core::blocker::{BlockerRegistry, BlockerSpec};
 use nami_core::command::{BindRegistry, BindSpec, CommandRegistry, CommandSpec, SequenceMatch};
 use nami_core::extension::{ExtensionRegistry, ExtensionSpec};
+use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
@@ -128,6 +129,7 @@ pub struct SubstratePipeline {
     readers: ReaderRegistry,
     commands: CommandRegistry,
     binds: BindRegistry,
+    omniboxes: OmniboxRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
     storage_registry: StorageRegistry,
@@ -158,6 +160,7 @@ pub struct SubstratePipeline {
     reader_names: Vec<String>,
     command_names: Vec<String>,
     bind_chords: Vec<String>,
+    omnibox_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -284,6 +287,22 @@ impl SubstratePipeline {
         extension_registry.extend(extension_specs);
         let extensions = Arc::new(std::sync::Mutex::new(extension_registry));
 
+        // Omnibox profiles — if none declared, register the built-in
+        // default so /omnibox works out of the box.
+        let omnibox_specs: Vec<OmniboxSpec> =
+            nami_core::omnibox::compile(&ext_src).unwrap_or_default();
+        let omnibox_names: Vec<String> = if omnibox_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            omnibox_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut omniboxes = OmniboxRegistry::new();
+        if omnibox_specs.is_empty() {
+            omniboxes.insert(OmniboxSpec::default_profile());
+        } else {
+            omniboxes.extend(omnibox_specs);
+        }
+
         // Commands + bindings. Compile from the full ext_src so users
         // can drop keyboard packs into substrate.d/.
         let command_specs: Vec<CommandSpec> =
@@ -352,7 +371,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -372,6 +391,8 @@ impl SubstratePipeline {
             readers.len(),
             commands.len(),
             binds.len(),
+            // Omnibox count is cheap to surface too.
+            omniboxes.len(),
         );
 
         Self {
@@ -389,6 +410,7 @@ impl SubstratePipeline {
             readers,
             commands,
             binds,
+            omniboxes,
             wasm_agents,
             wasm_host,
             storage_registry,
@@ -414,7 +436,64 @@ impl SubstratePipeline {
             reader_names,
             command_names,
             bind_chords,
+            omnibox_names,
         }
+    }
+
+    /// Rank autocomplete suggestions against `query`. Uses the named
+    /// profile or `default`. Caller passes history + bookmarks from
+    /// NamimadoService so we stay unaware of app-level types.
+    #[must_use]
+    pub fn omnibox_rank(
+        &self,
+        query: &str,
+        profile: Option<&str>,
+        history: &[nami_core::omnibox::HistoryItem],
+        bookmarks: &[nami_core::omnibox::BookmarkItem],
+        tabs: &[nami_core::omnibox::TabItem],
+        extensions: &[nami_core::omnibox::ExtensionItem],
+    ) -> Vec<nami_core::omnibox::Suggestion> {
+        // Pull commands straight from our CommandRegistry + bindings.
+        let commands: Vec<nami_core::omnibox::CommandItem> = self
+            .commands
+            .specs()
+            .iter()
+            .map(|c| nami_core::omnibox::CommandItem {
+                name: c.name.clone(),
+                description: c.description.clone(),
+                bound_keys: self
+                    .binds
+                    .specs()
+                    .iter()
+                    .filter(|b| b.command == c.name)
+                    .map(|b| b.canonical_key())
+                    .collect(),
+            })
+            .collect();
+
+        let spec = profile
+            .and_then(|n| self.omniboxes.get(n))
+            .or_else(|| self.omniboxes.specs().first())
+            .cloned()
+            .unwrap_or_else(OmniboxSpec::default_profile);
+
+        nami_core::omnibox::rank(
+            query,
+            &spec,
+            nami_core::omnibox::OmniboxInput {
+                history,
+                bookmarks,
+                commands: &commands,
+                tabs,
+                extensions,
+            },
+        )
+    }
+
+    /// Every defined omnibox profile's name.
+    #[must_use]
+    pub fn omnibox_names(&self) -> &[String] {
+        &self.omnibox_names
     }
 
     /// Dispatch a typed-so-far key sequence in `mode` against the
@@ -598,6 +677,7 @@ impl SubstratePipeline {
             readers: self.reader_names.clone(),
             commands: self.command_names.clone(),
             binds: self.bind_chords.clone(),
+            omniboxes: self.omnibox_names.clone(),
         }
     }
 

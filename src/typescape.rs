@@ -197,6 +197,7 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("POST", "/extensions/:name/enabled", "Toggle enabled state at runtime."),
         mk("GET", "/commands", "Every (defcommand) + the chords that bind to it."),
         mk("POST", "/commands/dispatch", "Simulate a typed key sequence; returns run/prefix/miss."),
+        mk("GET", "/omnibox", "URL-bar autocomplete — ranks history+bookmarks+commands+search providers. `?q=…&profile=…`."),
     ]
 }
 
@@ -237,6 +238,7 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("extension_remove", "Uninstall an extension."),
         mk("commands_list", "Every (defcommand) + its bound chords."),
         mk("dispatch_key", "Simulate a typed key sequence against (defbind)s."),
+        mk("omnibox", "URL-bar autocomplete — history+bookmarks+commands+search+navigate."),
     ]
 }
 
@@ -347,6 +349,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 20, "20 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 21, "21 DSL keywords expected in nami-core");
     }
 }

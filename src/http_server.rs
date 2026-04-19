@@ -18,9 +18,9 @@ use tracing::info;
 use crate::api::{
     AddBookmarkRequest, ApiError, BookmarkInfo, CommandInfo, DispatchKeyRequest,
     DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
-    ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, ReaderResponse,
-    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
-    StorageEntry, StorageSetRequest, StorageSummary,
+    ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse,
+    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
+    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
 };
 use crate::service::NamimadoService;
 
@@ -65,6 +65,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/extensions/:name/enabled", post(handle_extension_set_enabled))
         .route("/commands", get(handle_commands_list))
         .route("/commands/dispatch", post(handle_dispatch_key))
+        .route("/omnibox", get(handle_omnibox))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -386,6 +387,22 @@ async fn handle_extension_set_enabled(
                 ApiError::new("extension_unknown").with_detail(name),
             )
         })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct OmniboxQuery {
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    profile: Option<String>,
+}
+
+async fn handle_omnibox(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<OmniboxQuery>,
+) -> Json<OmniboxResponse> {
+    let query = q.q.unwrap_or_default();
+    Json(svc.omnibox(&query, q.profile.as_deref()))
 }
 
 async fn handle_commands_list(State(svc): State<NamimadoService>) -> Json<Vec<CommandInfo>> {

@@ -202,6 +202,7 @@ pub struct RulesInventory {
     pub readers: Vec<String>,
     pub commands: Vec<String>,
     pub binds: Vec<String>,
+    pub omniboxes: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -267,6 +268,24 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// GET /omnibox — one suggestion row.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OmniboxSuggestion {
+    pub kind: String,
+    pub label: String,
+    pub detail: Option<String>,
+    pub action: String,
+    pub score: f32,
+}
+
+/// GET /omnibox — response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct OmniboxResponse {
+    pub query: String,
+    pub profile: String,
+    pub suggestions: Vec<OmniboxSuggestion>,
 }
 
 /// POST /commands/dispatch — input. Simulates a key sequence against

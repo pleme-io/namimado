@@ -22,9 +22,9 @@ use url::Url;
 use crate::api::{
     AddBookmarkRequest, BookmarkInfo, CommandInfo, DispatchKeyRequest, DispatchKeyResponse,
     ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary, ExtensionToggleRequest,
-    HistoryInfo, NavigateRequest, NavigateResponse, ReaderResponse, ReloadResponse,
-    ReportResponse, RulesInventory, StateCellValue, StatusResponse, StorageEntry,
-    StorageSetRequest, StorageSummary,
+    HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse, OmniboxSuggestion,
+    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
+    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -403,6 +403,88 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn extensions_content_hash(&self) -> String {
         String::new()
+    }
+
+    /// GET /omnibox?q=… — unified URL-bar autocomplete. Feeds history,
+    /// bookmarks, and live command/bind state into the ranker.
+    #[cfg(feature = "browser-core")]
+    pub fn omnibox(&self, query: &str, profile: Option<&str>) -> OmniboxResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+
+        // Harvest local sources.
+        let history: Vec<nami_core::omnibox::HistoryItem> = inner
+            .history
+            .recent(500)
+            .iter()
+            .map(|e| nami_core::omnibox::HistoryItem {
+                title: e.title.clone(),
+                url: e.url.to_string(),
+                visit_count: e.visit_count,
+            })
+            .collect();
+        let bookmarks: Vec<nami_core::omnibox::BookmarkItem> = inner
+            .bookmarks
+            .list(None)
+            .iter()
+            .map(|b| nami_core::omnibox::BookmarkItem {
+                title: b.title.clone(),
+                url: b.url.to_string(),
+                tags: b.tags.clone(),
+            })
+            .collect();
+        let tabs: Vec<nami_core::omnibox::TabItem> = Vec::new();
+        let extensions: Vec<nami_core::omnibox::ExtensionItem> = inner
+            .pipeline
+            .extension_summary()
+            .into_iter()
+            .map(|(name, _v, enabled, _h, _r)| nami_core::omnibox::ExtensionItem {
+                name,
+                description: None,
+                enabled,
+            })
+            .collect();
+
+        let suggestions = inner
+            .pipeline
+            .omnibox_rank(query, profile, &history, &bookmarks, &tabs, &extensions);
+
+        let profile_name = profile
+            .map(str::to_owned)
+            .or_else(|| inner.pipeline.omnibox_names().first().cloned())
+            .unwrap_or_else(|| "default".to_owned());
+
+        OmniboxResponse {
+            query: query.to_owned(),
+            profile: profile_name,
+            suggestions: suggestions
+                .into_iter()
+                .map(|s| OmniboxSuggestion {
+                    kind: match s.kind {
+                        nami_core::omnibox::SuggestionKind::History => "history",
+                        nami_core::omnibox::SuggestionKind::Bookmark => "bookmark",
+                        nami_core::omnibox::SuggestionKind::Command => "command",
+                        nami_core::omnibox::SuggestionKind::Tab => "tab",
+                        nami_core::omnibox::SuggestionKind::Extension => "extension",
+                        nami_core::omnibox::SuggestionKind::Search => "search",
+                        nami_core::omnibox::SuggestionKind::Navigate => "navigate",
+                    }
+                    .to_owned(),
+                    label: s.label,
+                    detail: s.detail,
+                    action: s.action,
+                    score: s.score,
+                })
+                .collect(),
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn omnibox(&self, query: &str, profile: Option<&str>) -> OmniboxResponse {
+        OmniboxResponse {
+            query: query.to_owned(),
+            profile: profile.unwrap_or("default").to_owned(),
+            suggestions: Vec::new(),
+        }
     }
 
     /// GET /commands — full command+binding inventory.
@@ -788,6 +870,40 @@ mod tests {
         assert!(svc.storage_get("nonexistent", "k").is_none());
         assert!(svc.storage_entries("nonexistent").is_none());
         assert!(!svc.storage_delete("nonexistent", "k"));
+    }
+
+    #[test]
+    fn omnibox_empty_query_returns_zero_suggestions() {
+        let svc = NamimadoService::new();
+        let resp = svc.omnibox("", None);
+        assert!(resp.suggestions.is_empty());
+        assert_eq!(resp.query, "");
+    }
+
+    #[test]
+    fn omnibox_direct_url_emits_navigate() {
+        let svc = NamimadoService::new();
+        let resp = svc.omnibox("example.com", None);
+        // default profile always emits search providers, plus a
+        // navigate suggestion for the URL-shaped query.
+        assert!(resp
+            .suggestions
+            .iter()
+            .any(|s| s.kind == "navigate" && s.action == "navigate:https://example.com"));
+    }
+
+    #[test]
+    fn omnibox_picks_up_bookmarks_on_match() {
+        let svc = NamimadoService::new();
+        svc.bookmark_add(AddBookmarkRequest {
+            url: "https://example.com/docs".into(),
+            title: Some("Docs Home".into()),
+            folder: None,
+            tags: vec![],
+        })
+        .unwrap();
+        let resp = svc.omnibox("Docs", None);
+        assert!(resp.suggestions.iter().any(|s| s.kind == "bookmark"));
     }
 
     #[test]

@@ -57,6 +57,14 @@ struct GetBookmarksRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct OmniboxToolRequest {
+    /// User query string.
+    q: String,
+    /// Named (defomnibox) profile. None → first registered.
+    profile: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct DispatchKeyToolRequest {
     /// Typed-so-far sequence (Vim-style space-separated chords OK).
     typed: String,
@@ -414,6 +422,23 @@ impl NamimadoMcpServer {
                 "no_navigate_yet: call the navigate tool first",
             )),
         }
+    }
+
+    #[tool(
+        description = "Unified URL-bar autocomplete — run the (defomnibox) \
+                       ranker against a query. Returns suggestions across \
+                       history, bookmarks, commands, tabs, extensions, \
+                       search providers, and direct URLs. Same payload as \
+                       GET /omnibox?q=…"
+    )]
+    async fn omnibox(
+        &self,
+        Parameters(req): Parameters<OmniboxToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.service.omnibox(&req.q, req.profile.as_deref());
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
     }
 
     #[tool(
