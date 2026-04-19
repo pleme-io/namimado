@@ -25,6 +25,10 @@ pub struct StatusResponse {
     pub features: Vec<String>,
     /// URL of the most recent navigate, if any.
     pub last_url: Option<String>,
+    /// Unix epoch seconds when the substrate was last (re)loaded.
+    pub loaded_at_epoch: u64,
+    /// How many times /reload has been called. `0` = first load only.
+    pub reload_count: u64,
 }
 
 /// POST /navigate — input.
@@ -147,6 +151,21 @@ pub struct StateCellValue {
     pub value: Value,
 }
 
+/// POST /reload response — confirms the pipeline was rebuilt and
+/// surfaces the fresh inventory so the caller doesn't need a second
+/// round-trip to know what's now loaded.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ReloadResponse {
+    /// True when the reload actually re-ran the loader (always true
+    /// with `browser-core`; false in the degraded no-browser-core
+    /// build that has nothing to reload).
+    pub reloaded: bool,
+    /// How many times /reload has been called, including this one.
+    pub reload_count: u64,
+    /// The freshly loaded rule inventory.
+    pub rules: RulesInventory,
+}
+
 /// Substrate rule inventory — what's loaded, by DSL keyword.
 ///
 /// Useful for the inspector panel ("why didn't my rule fire?") and
@@ -243,5 +262,37 @@ mod tests {
         let back: ApiError = serde_json::from_str(&json).unwrap();
         assert_eq!(back.error, "bad_url");
         assert_eq!(back.detail.as_deref(), Some("scheme missing"));
+    }
+
+    #[test]
+    fn reload_response_serializes_rules_inventory() {
+        let resp = ReloadResponse {
+            reloaded: true,
+            reload_count: 7,
+            rules: RulesInventory {
+                normalize_rules: vec!["a".into(), "b".into()],
+                ..RulesInventory::default()
+            },
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"reload_count\":7"));
+        assert!(json.contains("\"normalize_rules\":[\"a\",\"b\"]"));
+        let back: ReloadResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.rules.normalize_rules.len(), 2);
+    }
+
+    #[test]
+    fn status_response_has_reload_fields() {
+        let s = StatusResponse {
+            service: "namimado".into(),
+            version: "0.1.0".into(),
+            features: vec!["browser-core".into()],
+            last_url: None,
+            loaded_at_epoch: 1_700_000_000,
+            reload_count: 3,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("\"loaded_at_epoch\":1700000000"));
+        assert!(json.contains("\"reload_count\":3"));
     }
 }

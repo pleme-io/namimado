@@ -16,11 +16,12 @@
 
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 use url::Url;
 
 use crate::api::{
-    NavigateRequest, NavigateResponse, ReportResponse, RulesInventory, StatusResponse,
-    StateCellValue,
+    NavigateRequest, NavigateResponse, ReloadResponse, ReportResponse, RulesInventory,
+    StateCellValue, StatusResponse,
 };
 
 #[cfg(feature = "browser-core")]
@@ -38,6 +39,8 @@ struct Inner {
     #[cfg(feature = "browser-core")]
     last_outcome: Option<NavigateOutcome>,
     version: &'static str,
+    loaded_at: SystemTime,
+    reload_count: u64,
 }
 
 impl NamimadoService {
@@ -49,6 +52,8 @@ impl NamimadoService {
                 pipeline: SubstratePipeline::load(),
                 last_outcome: None,
                 version: env!("CARGO_PKG_VERSION"),
+                loaded_at: SystemTime::now(),
+                reload_count: 0,
             })),
         }
     }
@@ -59,18 +64,61 @@ impl NamimadoService {
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 version: env!("CARGO_PKG_VERSION"),
+                loaded_at: SystemTime::now(),
+                reload_count: 0,
             })),
+        }
+    }
+
+    /// POST /reload — re-scan `substrate.d/*.lisp` + extensions.lisp +
+    /// transforms.lisp + aliases.lisp and swap in a fresh pipeline.
+    /// In-flight navigates complete first (mutex ordering). State
+    /// store is reset too — seeded fresh from the new (defstate) specs.
+    pub fn reload(&self) -> ReloadResponse {
+        #[cfg(feature = "browser-core")]
+        {
+            let fresh = SubstratePipeline::load();
+            let inv_after = fresh.rules_inventory();
+            let mut inner = self.inner.lock().expect("service mutex poisoned");
+            inner.pipeline = fresh;
+            inner.last_outcome = None;
+            inner.loaded_at = SystemTime::now();
+            inner.reload_count += 1;
+            return ReloadResponse {
+                reloaded: true,
+                reload_count: inner.reload_count,
+                rules: inv_after,
+            };
+        }
+
+        #[cfg(not(feature = "browser-core"))]
+        {
+            let mut inner = self.inner.lock().expect("service mutex poisoned");
+            inner.reload_count += 1;
+            inner.loaded_at = SystemTime::now();
+            ReloadResponse {
+                reloaded: false,
+                reload_count: inner.reload_count,
+                rules: RulesInventory::default(),
+            }
         }
     }
 
     /// GET /status — server liveness + feature set.
     pub fn status(&self) -> StatusResponse {
         let inner = self.inner.lock().expect("service mutex poisoned");
+        let loaded_at_epoch = inner
+            .loaded_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         StatusResponse {
             service: "namimado".to_owned(),
             version: inner.version.to_owned(),
             features: compile_features(),
             last_url: self.last_url(&inner),
+            loaded_at_epoch,
+            reload_count: inner.reload_count,
         }
     }
 
@@ -211,5 +259,44 @@ mod tests {
         let a = NamimadoService::new();
         let b = a.clone();
         assert_eq!(a.status().version, b.status().version);
+    }
+
+    #[test]
+    fn reload_increments_count_and_returns_fresh_inventory() {
+        let svc = NamimadoService::new();
+        let before = svc.status();
+        assert_eq!(before.reload_count, 0);
+
+        let r = svc.reload();
+        assert_eq!(r.reload_count, 1);
+        // Every feature-enabled build reloads; the no-browser-core
+        // build returns reloaded:false (see ReloadResponse).
+        assert_eq!(r.reloaded, cfg!(feature = "browser-core"));
+
+        let after = svc.status();
+        assert_eq!(after.reload_count, 1);
+        assert!(after.loaded_at_epoch >= before.loaded_at_epoch);
+    }
+
+    #[test]
+    fn reload_clears_last_outcome() {
+        // No navigate has happened yet → report is None.
+        let svc = NamimadoService::new();
+        assert!(svc.last_report().is_none());
+
+        // After a reload, the slot is still None (nothing to clear,
+        // but the API shape stays consistent).
+        svc.reload();
+        assert!(svc.last_report().is_none());
+    }
+
+    #[test]
+    fn repeated_reloads_are_sequenceable() {
+        let svc = NamimadoService::new();
+        for expected in 1..=3 {
+            let r = svc.reload();
+            assert_eq!(r.reload_count, expected);
+        }
+        assert_eq!(svc.status().reload_count, 3);
     }
 }

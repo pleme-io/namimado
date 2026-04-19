@@ -138,6 +138,28 @@ paths:
                 items:
                   $ref: '#/components/schemas/StateCellValue'
 
+  /reload:
+    post:
+      tags: [control]
+      summary: Re-read rc files and swap in a fresh pipeline.
+      description: |
+        Re-scans `extensions.lisp` + `transforms.lisp` + `aliases.lisp`
+        + every `substrate.d/*.lisp` drop-in, and swaps the
+        `SubstratePipeline` atomically. Use after editing rule packs
+        or other Lisp config — no process restart needed.
+
+        In-flight `POST /navigate` requests complete first; the
+        reload then acquires the same mutex and publishes the fresh
+        pipeline. State store resets to the new (defstate) seeds;
+        `last_outcome` is cleared.
+      operationId: reload
+      responses:
+        '200':
+          description: Fresh pipeline + inventory
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReloadResponse' }
+
   /openapi.yaml:
     get:
       tags: [meta]
@@ -166,7 +188,7 @@ components:
   schemas:
     StatusResponse:
       type: object
-      required: [service, version, features]
+      required: [service, version, features, loaded_at_epoch, reload_count]
       properties:
         service: { type: string, example: namimado }
         version: { type: string, example: "0.1.0" }
@@ -174,6 +196,39 @@ components:
           type: array
           items: { type: string, enum: [browser-core, gpu-chrome, http-server] }
         last_url: { type: string, nullable: true, format: uri }
+        loaded_at_epoch:
+          type: integer
+          minimum: 0
+          description: Unix epoch seconds when the substrate pipeline was last (re)loaded.
+        reload_count:
+          type: integer
+          minimum: 0
+          description: Total number of times /reload has been called.
+
+    ReloadResponse:
+      type: object
+      required: [reloaded, reload_count, rules]
+      properties:
+        reloaded: { type: boolean }
+        reload_count: { type: integer, minimum: 0 }
+        rules: { $ref: '#/components/schemas/RulesInventory' }
+
+    RulesInventory:
+      type: object
+      required: [states, effects, predicates, plans, agents, routes, queries, derived, components, normalize_rules, transforms, aliases]
+      properties:
+        states:         { type: array, items: { type: string } }
+        effects:        { type: array, items: { type: string } }
+        predicates:     { type: array, items: { type: string } }
+        plans:          { type: array, items: { type: string } }
+        agents:         { type: array, items: { type: string } }
+        routes:         { type: array, items: { type: string } }
+        queries:        { type: array, items: { type: string } }
+        derived:        { type: array, items: { type: string } }
+        components:     { type: array, items: { type: string } }
+        normalize_rules:{ type: array, items: { type: string } }
+        transforms:     { type: array, items: { type: string } }
+        aliases:        { type: array, items: { type: string } }
 
     NavigateRequest:
       type: object

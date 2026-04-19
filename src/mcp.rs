@@ -230,6 +230,23 @@ impl NamimadoMcpServer {
     }
 
     #[tool(
+        description = "Re-scan ~/.config/namimado/{extensions,transforms,aliases}.lisp \
+                       + substrate.d/*.lisp and swap in a fresh pipeline. State \
+                       store resets to the new (defstate) seeds. Use after editing \
+                       rule packs. Returns the freshly loaded inventory so you \
+                       don't need a second round-trip. Same as POST /reload."
+    )]
+    async fn reload(&self) -> Result<CallToolResult, McpError> {
+        let svc = self.service.clone();
+        let resp = tokio::task::spawn_blocking(move || svc.reload())
+            .await
+            .map_err(|e| McpError::internal_error(format!("join_error: {e}"), None))?;
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
         description = "Inventory of every DSL form currently loaded by the Lisp \
                        substrate — states, effects, predicates, plans, agents, \
                        routes, queries, derived, components, normalize_rules, \

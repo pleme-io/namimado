@@ -15,8 +15,8 @@ use std::net::SocketAddr;
 use tracing::info;
 
 use crate::api::{
-    ApiError, NavigateRequest, NavigateResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse,
+    ApiError, NavigateRequest, NavigateResponse, ReloadResponse, ReportResponse, RulesInventory,
+    StateCellValue, StatusResponse,
 };
 use crate::service::NamimadoService;
 
@@ -32,6 +32,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/state", get(handle_state))
         .route("/dom", get(handle_dom))
         .route("/rules", get(handle_rules))
+        .route("/reload", post(handle_reload))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -96,6 +97,22 @@ async fn handle_state(State(svc): State<NamimadoService>) -> Json<Vec<StateCellV
 
 async fn handle_rules(State(svc): State<NamimadoService>) -> Json<RulesInventory> {
     Json(svc.rules_inventory())
+}
+
+async fn handle_reload(
+    State(svc): State<NamimadoService>,
+) -> Result<Json<ReloadResponse>, ApiErrorResponse> {
+    // SubstratePipeline::load() constructs reqwest::blocking client
+    // which panics inside tokio. Spawn onto the blocking pool.
+    tokio::task::spawn_blocking(move || svc.reload())
+        .await
+        .map(Json)
+        .map_err(|e| {
+            ApiErrorResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiError::new("join_error").with_detail(e.to_string()),
+            )
+        })
 }
 
 async fn handle_dom(State(svc): State<NamimadoService>) -> Result<Response, ApiErrorResponse> {
