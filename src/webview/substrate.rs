@@ -34,6 +34,8 @@ use nami_core::derived::DerivedRegistry;
 use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
 use nami_core::blocker::{BlockerRegistry, BlockerSpec};
+use nami_core::extension::{ExtensionRegistry, ExtensionSpec};
+use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
 use nami_core::storage::kv::{Store, StorageRegistry, StorageSpec};
@@ -107,6 +109,8 @@ pub struct SubstratePipeline {
     components: ComponentRegistry,
     normalize_rules: NormalizeRegistry,
     blockers: BlockerRegistry,
+    extensions: Arc<std::sync::Mutex<ExtensionRegistry>>,
+    readers: ReaderRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
     storage_registry: StorageRegistry,
@@ -133,6 +137,8 @@ pub struct SubstratePipeline {
     wasm_agent_names: Vec<String>,
     blocker_names: Vec<String>,
     storage_names: Vec<String>,
+    extension_names: Vec<String>,
+    reader_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -251,6 +257,30 @@ impl SubstratePipeline {
         let mut blockers = BlockerRegistry::new();
         blockers.extend(blocker_specs);
 
+        let extension_specs: Vec<ExtensionSpec> =
+            nami_core::extension::compile(&ext_src).unwrap_or_default();
+        let extension_names: Vec<String> =
+            extension_specs.iter().map(|s| s.name.clone()).collect();
+        let mut extension_registry = ExtensionRegistry::new();
+        extension_registry.extend(extension_specs);
+        let extensions = Arc::new(std::sync::Mutex::new(extension_registry));
+
+        // Reader profiles — if none declared, register the built-in
+        // default so /reader works out of the box on any page.
+        let reader_specs: Vec<ReaderSpec> =
+            nami_core::reader::compile(&ext_src).unwrap_or_default();
+        let reader_names: Vec<String> = if reader_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            reader_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut readers = ReaderRegistry::new();
+        if reader_specs.is_empty() {
+            readers.insert(ReaderSpec::default_profile());
+        } else {
+            readers.extend(reader_specs);
+        }
+
         let wasm_agent_specs: Vec<WasmAgentSpec> =
             nami_core::wasm_agent::compile(&ext_src).unwrap_or_default();
         let wasm_agent_names: Vec<String> =
@@ -288,7 +318,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -304,6 +334,8 @@ impl SubstratePipeline {
             wasm_agents.len(),
             blockers.len(),
             storage_registry.len(),
+            extensions.lock().map(|r| r.len()).unwrap_or(0),
+            readers.len(),
         );
 
         Self {
@@ -317,6 +349,8 @@ impl SubstratePipeline {
             components,
             normalize_rules,
             blockers,
+            extensions,
+            readers,
             wasm_agents,
             wasm_host,
             storage_registry,
@@ -338,7 +372,81 @@ impl SubstratePipeline {
             wasm_agent_names,
             blocker_names,
             storage_names,
+            extension_names,
+            reader_names,
         }
+    }
+
+    /// Apply a named reader profile to the last-parsed document
+    /// (supplied by the caller — SubstratePipeline doesn't retain
+    /// parsed DOMs). When `name` is None, uses the first registered
+    /// profile. Returns None when no profile matches.
+    #[must_use]
+    pub fn apply_reader(&self, doc: &Document, name: Option<&str>, host: &str) -> Option<ReaderOutput> {
+        let spec = match name {
+            Some(n) => self.readers.specs().iter().find(|s| s.name == n),
+            None => self.readers.resolve(host).or_else(|| self.readers.specs().first()),
+        }?;
+        Some(nami_core::reader::apply_reader(doc, spec))
+    }
+
+    /// Installed extensions — summary. Returns (name, version,
+    /// enabled, host_permission_count, rule_count) tuples.
+    #[must_use]
+    pub fn extension_summary(&self) -> Vec<(String, String, bool, usize, usize)> {
+        let Ok(reg) = self.extensions.lock() else {
+            return Vec::new();
+        };
+        reg.specs()
+            .iter()
+            .map(|s| (
+                s.name.clone(),
+                s.version.clone(),
+                s.enabled,
+                s.host_permissions.len(),
+                s.rules.len(),
+            ))
+            .collect()
+    }
+
+    /// Full ExtensionSpec lookup by name.
+    #[must_use]
+    pub fn extension_get(&self, name: &str) -> Option<ExtensionSpec> {
+        self.extensions.lock().ok()?.get(name).cloned()
+    }
+
+    /// Toggle enable/disable at runtime. Returns true if the extension
+    /// exists and was toggled.
+    pub fn extension_set_enabled(&self, name: &str, enabled: bool) -> bool {
+        let Ok(mut reg) = self.extensions.lock() else {
+            return false;
+        };
+        reg.set_enabled(name, enabled)
+    }
+
+    /// Install a new extension (or replace by name). Returns the new
+    /// content hash of the registry after insertion.
+    pub fn extension_install(&self, spec: ExtensionSpec) -> Option<String> {
+        let mut reg = self.extensions.lock().ok()?;
+        reg.insert(spec);
+        Some(reg.content_hash())
+    }
+
+    /// Remove an extension by name. Returns true if removed.
+    pub fn extension_remove(&self, name: &str) -> bool {
+        let Ok(mut reg) = self.extensions.lock() else {
+            return false;
+        };
+        reg.remove(name)
+    }
+
+    /// Content-addressable hash of the installed extension set.
+    #[must_use]
+    pub fn extensions_content_hash(&self) -> String {
+        self.extensions
+            .lock()
+            .map(|r| r.content_hash())
+            .unwrap_or_default()
     }
 
     /// Get a `Store` handle by name. Returns `None` when the name
@@ -391,6 +499,8 @@ impl SubstratePipeline {
             wasm_agents: self.wasm_agent_names.clone(),
             blockers: self.blocker_names.clone(),
             storages: self.storage_names.clone(),
+            extensions: self.extension_names.clone(),
+            readers: self.reader_names.clone(),
         }
     }
 

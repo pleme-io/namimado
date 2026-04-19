@@ -185,6 +185,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/storage/:name", "Full entry snapshot for one store (or single value with `?key=…`)."),
         mk("POST", "/storage/:name", "Write one key→value into a store (body `{key,value}`)."),
         mk("DELETE", "/storage/:name", "Delete one key from a store (`?key=…`)."),
+        mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
+        mk("GET", "/extensions", "Installed extension summary."),
+        mk("POST", "/extensions", "Install an extension from raw Lisp source."),
+        mk("GET", "/extensions/:name", "Full ExtensionSpec for one installed extension."),
+        mk("DELETE", "/extensions/:name", "Uninstall an extension."),
+        mk("POST", "/extensions/:name/enabled", "Toggle enabled state at runtime."),
     ]
 }
 
@@ -217,6 +223,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("storage_get", "Read one key from a store."),
         mk("storage_set", "Write one key→value into a store."),
         mk("storage_delete", "Delete one key from a store."),
+        mk("reader", "Readability-style simplified view of the last navigated page."),
+        mk("extensions_list", "Installed extension summary."),
+        mk("extension_get", "Full ExtensionSpec for one extension."),
+        mk("extension_install", "Install (defextension) bundle from raw Lisp source."),
+        mk("extension_set_enabled", "Toggle extension enabled state at runtime."),
+        mk("extension_remove", "Uninstall an extension."),
     ]
 }
 
@@ -320,6 +332,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 16, "16 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 18, "18 DSL keywords expected in nami-core");
     }
 }

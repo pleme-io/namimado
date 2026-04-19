@@ -20,9 +20,10 @@ use std::time::SystemTime;
 use url::Url;
 
 use crate::api::{
-    AddBookmarkRequest, BookmarkInfo, HistoryInfo, NavigateRequest, NavigateResponse,
-    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
-    StorageEntry, StorageSetRequest, StorageSummary,
+    AddBookmarkRequest, BookmarkInfo, ExtensionInstallRequest, ExtensionInstallResponse,
+    ExtensionSummary, ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse,
+    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
+    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -273,6 +274,134 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn storage_delete(&self, _s: &str, _k: &str) -> bool {
         false
+    }
+
+    /// GET /reader — apply a (defreader) profile to the last-navigated
+    /// page. When `name` is None, uses the first matching profile for
+    /// the page's host. Returns None when no navigate has happened.
+    #[cfg(feature = "browser-core")]
+    pub fn reader(&self, name: Option<&str>) -> Option<ReaderResponse> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let outcome = inner.last_outcome.as_ref()?;
+        let sexp = outcome.dom_sexp.clone();
+        let host = outcome.final_url.host_str().unwrap_or("").to_owned();
+        drop(inner);
+
+        let doc = nami_core::lisp::sexp_to_dom(&sexp).ok()?;
+        let lock = self.inner.lock().expect("service mutex poisoned");
+        let out = lock.pipeline.apply_reader(&doc, name, &host)?;
+        let html = out.content.root.to_html();
+        Some(ReaderResponse {
+            spec_name: out.spec_name,
+            title: out.title,
+            byline: out.byline,
+            text: out.text,
+            html,
+            word_count: out.word_count,
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn reader(&self, _name: Option<&str>) -> Option<ReaderResponse> {
+        None
+    }
+
+    /// GET /extensions — installed extension summary.
+    #[cfg(feature = "browser-core")]
+    pub fn extensions_list(&self) -> Vec<ExtensionSummary> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .extension_summary()
+            .into_iter()
+            .map(|(name, version, enabled, hosts, rules)| ExtensionSummary {
+                name,
+                version,
+                enabled,
+                host_permissions_count: hosts,
+                rules_count: rules,
+            })
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extensions_list(&self) -> Vec<ExtensionSummary> {
+        Vec::new()
+    }
+
+    /// GET /extensions/:name — full ExtensionSpec.
+    #[cfg(feature = "browser-core")]
+    pub fn extension_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let spec = inner.pipeline.extension_get(name)?;
+        serde_json::to_value(&spec).ok()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extension_get(&self, _n: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// POST /extensions/:name/enabled — toggle runtime enabled state.
+    #[cfg(feature = "browser-core")]
+    pub fn extension_set_enabled(&self, name: &str, req: ExtensionToggleRequest) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.extension_set_enabled(name, req.enabled)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extension_set_enabled(&self, _n: &str, _r: ExtensionToggleRequest) -> bool {
+        false
+    }
+
+    /// POST /extensions — install from Lisp source.
+    #[cfg(feature = "browser-core")]
+    pub fn extension_install(&self, req: ExtensionInstallRequest) -> Result<ExtensionInstallResponse> {
+        let specs = nami_core::extension::compile(&req.lisp_source)
+            .map_err(|e| anyhow::anyhow!("compile failed: {e}"))?;
+        let first = specs
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("no (defextension …) form in source"))?;
+        let installed_name = first.name.clone();
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let hash = inner
+            .pipeline
+            .extension_install(first)
+            .ok_or_else(|| anyhow::anyhow!("registry lock poisoned"))?;
+        Ok(ExtensionInstallResponse {
+            installed: installed_name,
+            content_hash: hash,
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extension_install(&self, _r: ExtensionInstallRequest) -> Result<ExtensionInstallResponse> {
+        anyhow::bail!("browser-core feature disabled")
+    }
+
+    /// DELETE /extensions/:name — uninstall.
+    #[cfg(feature = "browser-core")]
+    pub fn extension_remove(&self, name: &str) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.extension_remove(name)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extension_remove(&self, _n: &str) -> bool {
+        false
+    }
+
+    /// Content hash of the currently installed extension set.
+    #[cfg(feature = "browser-core")]
+    pub fn extensions_content_hash(&self) -> String {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.extensions_content_hash()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn extensions_content_hash(&self) -> String {
+        String::new()
     }
 
     /// GET /bookmarks — list all (all folders).

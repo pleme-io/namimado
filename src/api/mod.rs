@@ -198,6 +198,8 @@ pub struct RulesInventory {
     pub wasm_agents: Vec<String>,
     pub blockers: Vec<String>,
     pub storages: Vec<String>,
+    pub extensions: Vec<String>,
+    pub readers: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -263,6 +265,50 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// GET /reader — simplified-view response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ReaderResponse {
+    pub spec_name: String,
+    pub title: Option<String>,
+    pub byline: Option<String>,
+    /// Plain-text render of the simplified content.
+    pub text: String,
+    /// Simplified DOM serialized back to HTML.
+    pub html: String,
+    pub word_count: usize,
+}
+
+/// GET /extensions — one summary row per installed extension.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExtensionSummary {
+    pub name: String,
+    pub version: String,
+    pub enabled: bool,
+    pub host_permissions_count: usize,
+    pub rules_count: usize,
+}
+
+/// POST /extensions/:name/enabled — toggle body.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExtensionToggleRequest {
+    pub enabled: bool,
+}
+
+/// POST /extensions — install from raw Lisp source. Server compiles
+/// the first (defextension …) form it finds; other def* forms in the
+/// same source are installed into their respective registries too.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExtensionInstallRequest {
+    pub lisp_source: String,
+}
+
+/// POST /extensions response — content hash after install.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExtensionInstallResponse {
+    pub installed: String,
+    pub content_hash: String,
 }
 
 /// POST /bookmarks — input.

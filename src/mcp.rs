@@ -57,6 +57,30 @@ struct GetBookmarksRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct ReaderRequest {
+    /// Named (defreader) profile. None uses the host-matching default.
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ExtensionNameRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ExtensionToggleToolRequest {
+    name: String,
+    enabled: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ExtensionInstallToolRequest {
+    /// Raw tatara-lisp source containing at least one (defextension …)
+    /// form. Other def* forms in the same source are installed too.
+    lisp_source: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct StorageStoreRequest {
     /// Store name, as declared by `(defstorage :name …)`.
     store: String,
@@ -381,6 +405,113 @@ impl NamimadoMcpServer {
             None => Ok(ToolResponse::error(
                 "no_navigate_yet: call the navigate tool first",
             )),
+        }
+    }
+
+    #[tool(
+        description = "Reader-view simplification of the last navigated page. \
+                       Applies a (defreader) profile (host-matching by default, \
+                       or named via :name) and returns title, byline, word \
+                       count, plain text render, and simplified HTML. \
+                       Absorbs Firefox Reader View + Safari Reader."
+    )]
+    async fn reader(
+        &self,
+        Parameters(req): Parameters<ReaderRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.reader(req.name.as_deref()) {
+            Some(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(
+                "reader_unavailable: no navigate yet, or no reader profile matched",
+            )),
+        }
+    }
+
+    #[tool(
+        description = "List installed (defextension) bundles — name, version, \
+                       enabled state, permission counts. Same as GET /extensions."
+    )]
+    async fn extensions_list(&self) -> Result<CallToolResult, McpError> {
+        let list = self.service.extensions_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&list).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full ExtensionSpec for one installed extension.")]
+    async fn extension_get(
+        &self,
+        Parameters(req): Parameters<ExtensionNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.extension_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "extension_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(
+        description = "Install a (defextension) bundle from raw tatara-lisp \
+                       source. Returns { installed, content_hash }. The hash \
+                       changes on any subsequent mutation of the extension set \
+                       — BLAKE3-attestable across the decentralized store."
+    )]
+    async fn extension_install(
+        &self,
+        Parameters(req): Parameters<ExtensionInstallToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::ExtensionInstallRequest {
+            lisp_source: req.lisp_source,
+        };
+        match self.service.extension_install(api_req) {
+            Ok(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            Err(e) => Ok(ToolResponse::error(&format!(
+                "extension_install_failed: {e}"
+            ))),
+        }
+    }
+
+    #[tool(description = "Enable or disable an installed extension at runtime.")]
+    async fn extension_set_enabled(
+        &self,
+        Parameters(req): Parameters<ExtensionToggleToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::ExtensionToggleRequest {
+            enabled: req.enabled,
+        };
+        if self.service.extension_set_enabled(&req.name, api_req) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "name": req.name,
+                "enabled": req.enabled,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "extension_unknown: {}",
+                req.name
+            )))
+        }
+    }
+
+    #[tool(description = "Uninstall an extension by name.")]
+    async fn extension_remove(
+        &self,
+        Parameters(req): Parameters<ExtensionNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        if self.service.extension_remove(&req.name) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "removed": req.name,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "extension_unknown: {}",
+                req.name
+            )))
         }
     }
 
