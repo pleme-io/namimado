@@ -169,6 +169,7 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/openapi.json", "OpenAPI spec as JSON."),
         mk("GET", "/typescape", "This typescape manifest (self-describing)."),
         mk("GET", "/ui", "Embedded inspector SPA."),
+        mk("GET", "/accessibility", "ARIA accessibility tree of the last navigated page (canonical n-* IS the role map)."),
         mk("GET", "/theme", "Current irodzuki ColorScheme as JSON — palette the GPU window + /ui both inherit."),
         mk("GET", "/theme.css", "Same scheme as CSS custom properties (`:root { --bg: …; --fg: …; --accent: …; }`) — the inspector SPA links this so a scheme swap propagates without a rebuild."),
         mk("GET", "/history", "Browsing history; `?q=` searches, `?limit=N` recent."),
@@ -200,6 +201,7 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("add_bookmark", "(stub) bookmark a URL."),
         mk("config_get", "Read a config value by dotted key."),
         mk("config_set", "(runtime-only) set a config value."),
+        mk("get_accessibility_tree", "ARIA AX tree from the last navigate — canonical n-* → role."),
         mk("history_recent", "Most recent browsing history entries — auto-recorded on every navigate."),
         mk("history_search", "Search history by title/URL substring."),
     ]

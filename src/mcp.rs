@@ -349,6 +349,21 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(
+        description = "Accessibility tree of the last navigated page — ARIA-shaped. \
+                       Canonical n-* vocab IS the role map, so every framework \
+                       normalize-pack covers gives you free a11y. Same payload as \
+                       GET /accessibility."
+    )]
+    async fn get_accessibility_tree(&self) -> Result<CallToolResult, McpError> {
+        match self.service.last_accessibility_tree() {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(
+                "no_navigate_yet: call the navigate tool first",
+            )),
+        }
+    }
+
     #[tool(description = "Most recent browsing history entries, newest first. Records a visit on every successful navigate automatically.")]
     async fn history_recent(&self) -> Result<CallToolResult, McpError> {
         let entries = self.service.history_recent(50);

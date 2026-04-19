@@ -259,6 +259,28 @@ impl NamimadoService {
         None
     }
 
+    /// GET /accessibility — AX tree of the last navigated DOM.
+    /// Canonical n-* vocab IS the ARIA role map, so every
+    /// normalize-matched page yields a valid AccessKit-shaped tree.
+    ///
+    /// Reconstitutes the Document from the cached dom_sexp rather
+    /// than keeping a second copy around — the overhead is trivial
+    /// (O(DOM) string parse) and it keeps NavigateOutcome lean.
+    #[cfg(feature = "browser-core")]
+    pub fn last_accessibility_tree(&self) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let sexp = inner.last_outcome.as_ref()?.dom_sexp.clone();
+        drop(inner);
+        let doc = nami_core::lisp::sexp_to_dom(&sexp).ok()?;
+        let tree = nami_core::accessibility::ax_tree(&doc);
+        serde_json::to_value(&tree).ok()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn last_accessibility_tree(&self) -> Option<serde_json::Value> {
+        None
+    }
+
     /// GET /rules — inventory of every loaded DSL form by name.
     pub fn rules_inventory(&self) -> RulesInventory {
         #[cfg(feature = "browser-core")]

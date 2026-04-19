@@ -37,6 +37,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/typescape", get(handle_typescape))
         .route("/theme", get(handle_theme_json))
         .route("/theme.css", get(handle_theme_css))
+        .route("/accessibility", get(handle_accessibility))
         .route("/history", get(handle_history))
         .route("/history", delete(handle_history_clear))
         .route("/bookmarks", get(handle_bookmarks_list))
@@ -121,6 +122,20 @@ async fn handle_theme_css() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         crate::theme::theme_css(),
     )
+}
+
+async fn handle_accessibility(
+    State(svc): State<NamimadoService>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.last_accessibility_tree()
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_navigate_yet")
+                    .with_detail("call POST /navigate first"),
+            )
+        })
 }
 
 #[derive(Debug, Deserialize, Default)]
