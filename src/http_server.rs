@@ -6,7 +6,7 @@
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{StatusCode, header},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get, post},
@@ -17,7 +17,8 @@ use tracing::info;
 
 use crate::api::{
     AddBookmarkRequest, ApiError, BookmarkInfo, HistoryInfo, NavigateRequest, NavigateResponse,
-    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
+    ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse, StorageEntry,
+    StorageSetRequest, StorageSummary,
 };
 use crate::service::NamimadoService;
 
@@ -43,6 +44,13 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/bookmarks", get(handle_bookmarks_list))
         .route("/bookmarks", post(handle_bookmark_add))
         .route("/bookmarks", delete(handle_bookmark_remove))
+        .route("/storage", get(handle_storage_list))
+        .route(
+            "/storage/:name",
+            get(handle_storage_read)
+                .post(handle_storage_set)
+                .delete(handle_storage_delete),
+        )
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
         // Inspector SPA — polls the API, shows substrate live.
@@ -202,6 +210,82 @@ async fn handle_bookmark_remove(
                 ApiError::new("bookmark_remove_failed").with_detail(e.to_string()),
             )
         })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StorageKeyQuery {
+    #[serde(default)]
+    key: Option<String>,
+}
+
+async fn handle_storage_list(State(svc): State<NamimadoService>) -> Json<Vec<StorageSummary>> {
+    Json(svc.storage_list())
+}
+
+async fn handle_storage_read(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+    Query(q): Query<StorageKeyQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    if let Some(key) = q.key.as_deref() {
+        match svc.storage_get(&name, key) {
+            Some(v) => Ok(Json(v)),
+            None => Err(ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("storage_key_missing")
+                    .with_detail(format!("{name}:{key}")),
+            )),
+        }
+    } else {
+        match svc.storage_entries(&name) {
+            Some(entries) => Ok(Json(serde_json::to_value(&entries).unwrap_or_default())),
+            None => Err(ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("storage_unknown").with_detail(name),
+            )),
+        }
+    }
+}
+
+async fn handle_storage_set(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+    Json(req): Json<StorageSetRequest>,
+) -> Result<Json<StorageEntry>, ApiErrorResponse> {
+    let entry = StorageEntry {
+        key: req.key.clone(),
+        value: req.value.clone(),
+    };
+    if svc.storage_set(&name, req) {
+        Ok(Json(entry))
+    } else {
+        Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("storage_unknown").with_detail(name),
+        ))
+    }
+}
+
+async fn handle_storage_delete(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+    Query(q): Query<StorageKeyQuery>,
+) -> Result<StatusCode, ApiErrorResponse> {
+    let Some(key) = q.key else {
+        return Err(ApiErrorResponse(
+            StatusCode::BAD_REQUEST,
+            ApiError::new("missing_key").with_detail("DELETE /storage/:name requires ?key="),
+        ));
+    };
+    if svc.storage_delete(&name, &key) {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("storage_key_missing")
+                .with_detail(format!("{name}:{key}")),
+        ))
+    }
 }
 
 async fn handle_reload(

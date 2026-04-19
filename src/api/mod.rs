@@ -197,6 +197,7 @@ pub struct RulesInventory {
     pub aliases: Vec<String>,
     pub wasm_agents: Vec<String>,
     pub blockers: Vec<String>,
+    pub storages: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -241,6 +242,27 @@ impl BookmarkInfo {
             added_at: b.created_at,
         }
     }
+}
+
+/// POST /storage/:name — input. Value is arbitrary JSON.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StorageSetRequest {
+    pub key: String,
+    pub value: serde_json::Value,
+}
+
+/// GET /storage — per-store summary.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StorageSummary {
+    pub name: String,
+    pub entry_count: usize,
+}
+
+/// GET /storage/:name — per-entry snapshot for one store.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StorageEntry {
+    pub key: String,
+    pub value: serde_json::Value,
 }
 
 /// POST /bookmarks — input.

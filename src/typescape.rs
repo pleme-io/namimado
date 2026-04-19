@@ -181,6 +181,10 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/bookmarks", "List all bookmarks."),
         mk("POST", "/bookmarks", "Add a bookmark."),
         mk("DELETE", "/bookmarks", "Remove a bookmark (`?url=…`)."),
+        mk("GET", "/storage", "Per-store summary of every (defstorage …) declared store."),
+        mk("GET", "/storage/:name", "Full entry snapshot for one store (or single value with `?key=…`)."),
+        mk("POST", "/storage/:name", "Write one key→value into a store (body `{key,value}`)."),
+        mk("DELETE", "/storage/:name", "Delete one key from a store (`?key=…`)."),
     ]
 }
 
@@ -208,6 +212,11 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("get_accessibility_tree", "ARIA AX tree from the last navigate — canonical n-* → role."),
         mk("history_recent", "Most recent browsing history entries — auto-recorded on every navigate."),
         mk("history_search", "Search history by title/URL substring."),
+        mk("storage_list", "Per-store summary of every (defstorage …) declared store."),
+        mk("storage_entries", "Full key→value snapshot of one store."),
+        mk("storage_get", "Read one key from a store."),
+        mk("storage_set", "Write one key→value into a store."),
+        mk("storage_delete", "Delete one key from a store."),
     ]
 }
 
@@ -311,6 +320,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 15, "15 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 16, "16 DSL keywords expected in nami-core");
     }
 }

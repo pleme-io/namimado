@@ -57,6 +57,26 @@ struct GetBookmarksRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct StorageStoreRequest {
+    /// Store name, as declared by `(defstorage :name …)`.
+    store: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct StorageKeyRequest {
+    store: String,
+    key: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct StorageSetToolRequest {
+    store: String,
+    key: String,
+    /// Arbitrary JSON value. Use `{"_lisp": "(quote …)"}` to persist tatara-lisp.
+    value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct HistorySearchRequest {
     /// Query — matches title or URL substring.
     query: String,
@@ -361,6 +381,105 @@ impl NamimadoMcpServer {
             None => Ok(ToolResponse::error(
                 "no_navigate_yet: call the navigate tool first",
             )),
+        }
+    }
+
+    #[tool(
+        description = "List every (defstorage …) declared store with its current \
+                       entry count. Each store is a pure tatara-lisp append-only \
+                       event log, replayed on startup into a live in-memory map. \
+                       Same payload as GET /storage."
+    )]
+    async fn storage_list(&self) -> Result<CallToolResult, McpError> {
+        let summaries = self.service.storage_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&summaries).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Full key→value snapshot of one (defstorage …) store. \
+                       Same payload as GET /storage/:name."
+    )]
+    async fn storage_entries(
+        &self,
+        Parameters(req): Parameters<StorageStoreRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.storage_entries(&req.store) {
+            Some(entries) => Ok(ToolResponse::success(
+                &serde_json::to_value(&entries).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(&format!(
+                "storage_unknown: {}",
+                req.store
+            ))),
+        }
+    }
+
+    #[tool(
+        description = "Read one key from a (defstorage …) store. Returns the raw \
+                       JSON value; Lisp-tagged values round-trip as \
+                       `{\"_lisp\": …}`. Same as GET /storage/:name?key=…"
+    )]
+    async fn storage_get(
+        &self,
+        Parameters(req): Parameters<StorageKeyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.storage_get(&req.store, &req.key) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "storage_key_missing: {}:{}",
+                req.store, req.key
+            ))),
+        }
+    }
+
+    #[tool(
+        description = "Write one key→value into a (defstorage …) store. Persisted \
+                       to the append-only event log; TTL and compaction apply \
+                       per the store's spec. Same as POST /storage/:name."
+    )]
+    async fn storage_set(
+        &self,
+        Parameters(req): Parameters<StorageSetToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::StorageSetRequest {
+            key: req.key.clone(),
+            value: req.value.clone(),
+        };
+        if self.service.storage_set(&req.store, api_req) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "store": req.store,
+                "key": req.key,
+                "value": req.value,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "storage_unknown: {}",
+                req.store
+            )))
+        }
+    }
+
+    #[tool(
+        description = "Delete one key from a (defstorage …) store. Same as \
+                       DELETE /storage/:name?key=…"
+    )]
+    async fn storage_delete(
+        &self,
+        Parameters(req): Parameters<StorageKeyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        if self.service.storage_delete(&req.store, &req.key) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "deleted": true,
+                "store": req.store,
+                "key": req.key,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "storage_key_missing: {}:{}",
+                req.store, req.key
+            )))
         }
     }
 

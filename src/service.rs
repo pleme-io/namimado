@@ -22,6 +22,7 @@ use url::Url;
 use crate::api::{
     AddBookmarkRequest, BookmarkInfo, HistoryInfo, NavigateRequest, NavigateResponse,
     ReloadResponse, ReportResponse, RulesInventory, StateCellValue, StatusResponse,
+    StorageEntry, StorageSetRequest, StorageSummary,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -194,6 +195,84 @@ impl NamimadoService {
     pub fn history_clear(&self) {
         let mut inner = self.inner.lock().expect("service mutex poisoned");
         inner.history.clear();
+    }
+
+    /// GET /storage — per-store summary.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_list(&self) -> Vec<StorageSummary> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .storage_summary()
+            .into_iter()
+            .map(|(name, entry_count)| StorageSummary { name, entry_count })
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_list(&self) -> Vec<StorageSummary> {
+        Vec::new()
+    }
+
+    /// GET /storage/:name — full entry snapshot, single store.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_entries(&self, store: &str) -> Option<Vec<StorageEntry>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let s = inner.pipeline.get_store(store)?;
+        Some(
+            s.entries()
+                .into_iter()
+                .map(|(key, value)| StorageEntry { key, value })
+                .collect(),
+        )
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_entries(&self, _store: &str) -> Option<Vec<StorageEntry>> {
+        None
+    }
+
+    /// GET /storage/:name?key=K — single-value lookup.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_get(&self, store: &str, key: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.get_store(store)?.get(key)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_get(&self, _s: &str, _k: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// POST /storage/:name — set one key → value.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_set(&self, store: &str, req: StorageSetRequest) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let Some(s) = inner.pipeline.get_store(store) else {
+            return false;
+        };
+        s.set(req.key, req.value);
+        true
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_set(&self, _s: &str, _r: StorageSetRequest) -> bool {
+        false
+    }
+
+    /// DELETE /storage/:name?key=K — remove one key.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_delete(&self, store: &str, key: &str) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let Some(s) = inner.pipeline.get_store(store) else {
+            return false;
+        };
+        s.delete(key)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_delete(&self, _s: &str, _k: &str) -> bool {
+        false
     }
 
     /// GET /bookmarks — list all (all folders).
@@ -507,5 +586,35 @@ mod tests {
         assert!(added);
         let list = svc.bookmarks_list();
         assert!(list[0].url.starts_with("https://example.com"));
+    }
+
+    #[test]
+    fn storage_list_returns_vec_without_panic() {
+        // Smoke — even with no (defstorage …) declared, the surface
+        // must not panic. It returns an empty Vec.
+        let svc = NamimadoService::new();
+        let stores = svc.storage_list();
+        assert!(stores.is_empty() || stores.iter().all(|s| !s.name.is_empty()));
+    }
+
+    #[test]
+    fn storage_get_on_unknown_store_is_none() {
+        let svc = NamimadoService::new();
+        assert!(svc.storage_get("nonexistent", "k").is_none());
+        assert!(svc.storage_entries("nonexistent").is_none());
+        assert!(!svc.storage_delete("nonexistent", "k"));
+    }
+
+    #[test]
+    fn storage_set_on_unknown_store_is_false() {
+        let svc = NamimadoService::new();
+        let ok = svc.storage_set(
+            "nonexistent",
+            StorageSetRequest {
+                key: "k".into(),
+                value: serde_json::json!(1),
+            },
+        );
+        assert!(!ok);
     }
 }

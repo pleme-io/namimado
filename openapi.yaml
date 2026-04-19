@@ -160,6 +160,100 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ReloadResponse' }
 
+  /storage:
+    get:
+      tags: [storage]
+      summary: Per-store summary of every (defstorage …) declared store.
+      operationId: listStorage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StorageSummary' }
+
+  /storage/{name}:
+    get:
+      tags: [storage]
+      summary: Full entry snapshot for one store, or single value with `?key=`.
+      operationId: getStorage
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: query
+          name: key
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/StorageEntry' }
+                  - {}
+        '404':
+          description: Unknown store or missing key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+    post:
+      tags: [storage]
+      summary: Write one key→value into a store.
+      operationId: setStorage
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StorageSetRequest' }
+      responses:
+        '200':
+          description: Written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorageEntry' }
+        '404':
+          description: Unknown store.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+    delete:
+      tags: [storage]
+      summary: Delete one key from a store.
+      operationId: deleteStorageKey
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: query
+          name: key
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted. }
+        '400':
+          description: Missing key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '404':
+          description: Unknown store or missing key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
   /openapi.yaml:
     get:
       tags: [meta]
@@ -302,6 +396,27 @@ components:
       properties:
         name: { type: string }
         value: { description: Arbitrary JSON — matches the state store shape. }
+
+    StorageSummary:
+      type: object
+      required: [name, entry_count]
+      properties:
+        name: { type: string }
+        entry_count: { type: integer, minimum: 0 }
+
+    StorageEntry:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string }
+        value: { description: Arbitrary JSON. Use `{_lisp: sexp}` for tatara-lisp values. }
+
+    StorageSetRequest:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string }
+        value: { description: Arbitrary JSON. Use `{_lisp: sexp}` for tatara-lisp values. }
 
     ApiError:
       type: object

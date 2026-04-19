@@ -36,6 +36,8 @@ use nami_core::effect::EffectRegistry;
 use nami_core::blocker::{BlockerRegistry, BlockerSpec};
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
+use nami_core::storage::kv::{Store, StorageRegistry, StorageSpec};
+use std::collections::HashMap;
 use nami_core::wasm::{WasmAgentContext, WasmHost};
 use nami_core::wasm_agent::{WasmAgentRegistry, WasmAgentSpec};
 use std::sync::Arc;
@@ -107,6 +109,8 @@ pub struct SubstratePipeline {
     blockers: BlockerRegistry,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
+    storage_registry: StorageRegistry,
+    stores: HashMap<String, Store>,
 
     transforms: Vec<DomTransformSpec>,
     aliases: AliasRegistry,
@@ -128,6 +132,7 @@ pub struct SubstratePipeline {
     alias_names: Vec<String>,
     wasm_agent_names: Vec<String>,
     blocker_names: Vec<String>,
+    storage_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -217,6 +222,29 @@ impl SubstratePipeline {
         let mut normalize_rules = NormalizeRegistry::new();
         normalize_rules.extend(normalize_specs);
 
+        let storage_specs: Vec<StorageSpec> =
+            nami_core::storage::kv::compile(&ext_src).unwrap_or_default();
+        let storage_names: Vec<String> =
+            storage_specs.iter().map(|s| s.name.clone()).collect();
+        // Resolve relative paths against the runtime data dir; absolute
+        // paths pass through. A missing path keeps the store volatile.
+        let data_root = data_dir();
+        let mut storage_registry = StorageRegistry::new();
+        let mut stores: HashMap<String, Store> = HashMap::new();
+        for mut spec in storage_specs {
+            if let Some(path) = spec.path.take() {
+                let resolved = if path.is_absolute() {
+                    path
+                } else {
+                    data_root.join(path)
+                };
+                spec.path = Some(resolved);
+            }
+            let store = Store::from_spec(&spec);
+            stores.insert(spec.name.clone(), store);
+            storage_registry.insert(spec);
+        }
+
         let blocker_specs: Vec<BlockerSpec> =
             nami_core::blocker::compile(&ext_src).unwrap_or_default();
         let blocker_names: Vec<String> = blocker_specs.iter().map(|s| s.name.clone()).collect();
@@ -260,7 +288,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -275,6 +303,7 @@ impl SubstratePipeline {
             normalize_rules.len(),
             wasm_agents.len(),
             blockers.len(),
+            storage_registry.len(),
         );
 
         Self {
@@ -290,6 +319,8 @@ impl SubstratePipeline {
             blockers,
             wasm_agents,
             wasm_host,
+            storage_registry,
+            stores,
             transforms,
             aliases,
             state_store,
@@ -306,7 +337,29 @@ impl SubstratePipeline {
             alias_names,
             wasm_agent_names,
             blocker_names,
+            storage_names,
         }
+    }
+
+    /// Get a `Store` handle by name. Returns `None` when the name
+    /// doesn't match any `(defstorage)` declaration in the loaded
+    /// substrate. Cheap to call — the underlying map is cloned.
+    #[must_use]
+    pub fn get_store(&self, name: &str) -> Option<Store> {
+        self.stores.get(name).cloned()
+    }
+
+    /// All configured store names + their entry counts. Powers the
+    /// MCP `storage_list_stores` tool and GET /storage.
+    #[must_use]
+    pub fn storage_summary(&self) -> Vec<(String, usize)> {
+        let mut out: Vec<(String, usize)> = self
+            .stores
+            .iter()
+            .map(|(name, store)| (name.clone(), store.len()))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 
     /// Live snapshot of the state store (accumulates across navigates).
@@ -316,6 +369,8 @@ impl SubstratePipeline {
         self.state_store.snapshot().into_iter().collect()
     }
 
+    // Helper: rules inventory requires knowing the storage names.
+    // See below.
     /// Inventory of every DSL form currently loaded, by name. Powers
     /// the `/rules` endpoint and MCP `get_rules` tool.
     #[must_use]
@@ -335,6 +390,7 @@ impl SubstratePipeline {
             aliases: self.alias_names.clone(),
             wasm_agents: self.wasm_agent_names.clone(),
             blockers: self.blocker_names.clone(),
+            storages: self.storage_names.clone(),
         }
     }
 
@@ -587,6 +643,22 @@ impl SubstratePipeline {
 fn wasm_agent_dir() -> PathBuf {
     config_dir()
         .map(|d| d.join("wasm"))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Runtime data dir — `$XDG_DATA_HOME/namimado/` or
+/// `~/.local/share/namimado/`. Relative `(defstorage :path …)`
+/// paths resolve against this. Scheme separate from `config_dir()`
+/// because storage is a different lifecycle than config — one is
+/// mutable runtime state, the other is authored + reloaded.
+fn data_dir() -> PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        if !xdg.is_empty() {
+            return PathBuf::from(xdg).join("namimado");
+        }
+    }
+    dirs::home_dir()
+        .map(|h| h.join(".local").join("share").join("namimado"))
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
