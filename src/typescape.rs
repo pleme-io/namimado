@@ -198,6 +198,10 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/commands", "Every (defcommand) + the chords that bind to it."),
         mk("POST", "/commands/dispatch", "Simulate a typed key sequence; returns run/prefix/miss."),
         mk("GET", "/omnibox", "URL-bar autocomplete — ranks history+bookmarks+commands+search providers. `?q=…&profile=…`."),
+        mk("POST", "/extensions/verify", "Verify a SignedExtension envelope against the trust DB."),
+        mk("GET", "/trustdb", "List every trusted ed25519 pubkey (base64)."),
+        mk("POST", "/trustdb", "Add a base64 ed25519 pubkey to the trust DB."),
+        mk("DELETE", "/trustdb/:pubkey", "Revoke a trusted pubkey."),
     ]
 }
 
@@ -239,6 +243,10 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("commands_list", "Every (defcommand) + its bound chords."),
         mk("dispatch_key", "Simulate a typed key sequence against (defbind)s."),
         mk("omnibox", "URL-bar autocomplete — history+bookmarks+commands+search+navigate."),
+        mk("verify_extension", "Verify a SignedExtension against the trust DB."),
+        mk("trustdb_list", "List every trusted ed25519 pubkey."),
+        mk("trustdb_add", "Add a pubkey to the trust DB."),
+        mk("trustdb_revoke", "Revoke a trusted pubkey."),
     ]
 }
 

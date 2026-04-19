@@ -57,6 +57,18 @@ struct GetBookmarksRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct TrustPubkeyRequest {
+    public_key: String,
+    #[serde(default)]
+    signed_by: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct RevokePubkeyRequest {
+    public_key: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct OmniboxToolRequest {
     /// User query string.
     q: String,
@@ -421,6 +433,70 @@ impl NamimadoMcpServer {
             None => Ok(ToolResponse::error(
                 "no_navigate_yet: call the navigate tool first",
             )),
+        }
+    }
+
+    #[tool(
+        description = "Verify a signed-extension envelope against the trust \
+                       DB. Body is a full SignedExtension JSON (spec + \
+                       ed25519 signature). Returns status: trusted / \
+                       valid-but-untrusted / invalid. Use before install \
+                       to refuse untrusted bundles in strict mode."
+    )]
+    async fn verify_extension(
+        &self,
+        Parameters(req): Parameters<serde_json::Value>,
+    ) -> Result<CallToolResult, McpError> {
+        let signed: nami_core::extension::SignedExtension = match serde_json::from_value(req) {
+            Ok(s) => s,
+            Err(e) => return Ok(ToolResponse::error(&format!("bad_body: {e}"))),
+        };
+        let resp = self.service.verify_signed_extension(&signed);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every trusted ed25519 pubkey (base64) in the trust DB.")]
+    async fn trustdb_list(&self) -> Result<CallToolResult, McpError> {
+        let keys = self.service.trustdb_keys();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&keys).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Add a base64-encoded ed25519 pubkey to the trust DB.")]
+    async fn trustdb_add(
+        &self,
+        Parameters(req): Parameters<TrustPubkeyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::TrustdbKeyRequest {
+            public_key: req.public_key.clone(),
+            signed_by: req.signed_by,
+        };
+        if self.service.trust_pubkey(api_req) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "trusted": req.public_key,
+            })))
+        } else {
+            Ok(ToolResponse::error("trustdb_locked"))
+        }
+    }
+
+    #[tool(description = "Revoke a previously trusted pubkey.")]
+    async fn trustdb_revoke(
+        &self,
+        Parameters(req): Parameters<RevokePubkeyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        if self.service.revoke_pubkey(&req.public_key) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "revoked": req.public_key,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "trustdb_key_missing: {}",
+                req.public_key
+            )))
         }
     }
 

@@ -270,6 +270,26 @@ pub struct StorageEntry {
     pub value: serde_json::Value,
 }
 
+/// POST /extensions/verify — verify a signed-extension envelope
+/// against the namimado trust DB. Body: a full SignedExtension JSON
+/// (spec + signature). Returns status + optional signer metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct VerifyExtensionResponse {
+    /// "trusted" | "valid-but-untrusted" | "invalid"
+    pub status: String,
+    pub public_key: Option<String>,
+    pub signed_by: Option<String>,
+    pub detail: Option<String>,
+}
+
+/// POST /trustdb — add/remove body.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TrustdbKeyRequest {
+    pub public_key: String,
+    #[serde(default)]
+    pub signed_by: Option<String>,
+}
+
 /// GET /omnibox — one suggestion row.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct OmniboxSuggestion {

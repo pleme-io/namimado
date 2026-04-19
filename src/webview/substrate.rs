@@ -35,7 +35,10 @@ use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
 use nami_core::blocker::{BlockerRegistry, BlockerSpec};
 use nami_core::command::{BindRegistry, BindSpec, CommandRegistry, CommandSpec, SequenceMatch};
-use nami_core::extension::{ExtensionRegistry, ExtensionSpec};
+use nami_core::extension::{
+    ExtensionRegistry, ExtensionSpec, SignedExtension, Trustdb, VerificationError,
+    VerificationStatus,
+};
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::normalize::NormalizeRegistry;
@@ -126,6 +129,9 @@ pub struct SubstratePipeline {
     normalize_rules: NormalizeRegistry,
     blockers: BlockerRegistry,
     extensions: Arc<std::sync::Mutex<ExtensionRegistry>>,
+    /// Trusted signing keys for (defextension) bundles. Loaded from
+    /// ~/.config/namimado/trustdb.txt (one base64 pubkey per line).
+    trustdb: Arc<std::sync::Mutex<Trustdb>>,
     readers: ReaderRegistry,
     commands: CommandRegistry,
     binds: BindRegistry,
@@ -287,6 +293,23 @@ impl SubstratePipeline {
         extension_registry.extend(extension_specs);
         let extensions = Arc::new(std::sync::Mutex::new(extension_registry));
 
+        // Trust DB — pubkeys allowed to sign extensions. One
+        // base64-encoded ed25519 pubkey per line, `#`-prefixed
+        // comments allowed. Silently empty if the file is absent.
+        let mut trustdb = Trustdb::new();
+        if let Some(path) = cfg_dir.as_ref().map(|d| d.join("trustdb.txt")) {
+            if let Ok(body) = std::fs::read_to_string(&path) {
+                for line in body.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                        continue;
+                    }
+                    trustdb.trust(trimmed.to_owned());
+                }
+            }
+        }
+        let trustdb = Arc::new(std::sync::Mutex::new(trustdb));
+
         // Omnibox profiles — if none declared, register the built-in
         // default so /omnibox works out of the box.
         let omnibox_specs: Vec<OmniboxSpec> =
@@ -407,6 +430,7 @@ impl SubstratePipeline {
             normalize_rules,
             blockers,
             extensions,
+            trustdb,
             readers,
             commands,
             binds,
@@ -620,6 +644,46 @@ impl SubstratePipeline {
         self.extensions
             .lock()
             .map(|r| r.content_hash())
+            .unwrap_or_default()
+    }
+
+    /// Verify a signed extension bundle against the trust DB. Returns
+    /// the full VerificationStatus so callers can distinguish Trusted
+    /// from ValidButUntrusted (e.g., for a TOFU install prompt).
+    pub fn verify_signed_extension(
+        &self,
+        signed: &SignedExtension,
+    ) -> Result<VerificationStatus, VerificationError> {
+        let db = self.trustdb.lock().map_err(|_| {
+            VerificationError::Canonicalize("trustdb mutex poisoned".into())
+        })?;
+        nami_core::extension::verify(signed, &db)
+    }
+
+    /// Trust a new pubkey (base64-encoded ed25519). Does not persist
+    /// to disk — caller is responsible for rewriting trustdb.txt.
+    pub fn trust_pubkey(&self, pubkey_b64: &str) -> bool {
+        let Ok(mut db) = self.trustdb.lock() else {
+            return false;
+        };
+        db.trust(pubkey_b64.to_owned());
+        true
+    }
+
+    /// Revoke a previously trusted pubkey.
+    pub fn revoke_pubkey(&self, pubkey_b64: &str) -> bool {
+        let Ok(mut db) = self.trustdb.lock() else {
+            return false;
+        };
+        db.revoke(pubkey_b64)
+    }
+
+    /// Every trusted pubkey, sorted. Powers /trustdb.
+    #[must_use]
+    pub fn trustdb_keys(&self) -> Vec<String> {
+        self.trustdb
+            .lock()
+            .map(|db| db.keys())
             .unwrap_or_default()
     }
 

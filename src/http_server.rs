@@ -20,7 +20,8 @@ use crate::api::{
     DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
     ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
+    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
+    VerifyExtensionResponse,
 };
 use crate::service::NamimadoService;
 
@@ -63,6 +64,9 @@ pub fn router(service: NamimadoService) -> Router {
             get(handle_extension_get).delete(handle_extension_remove),
         )
         .route("/extensions/:name/enabled", post(handle_extension_set_enabled))
+        .route("/extensions/verify", post(handle_extension_verify))
+        .route("/trustdb", get(handle_trustdb_list).post(handle_trustdb_add))
+        .route("/trustdb/:pubkey", delete(handle_trustdb_revoke))
         .route("/commands", get(handle_commands_list))
         .route("/commands/dispatch", post(handle_dispatch_key))
         .route("/omnibox", get(handle_omnibox))
@@ -387,6 +391,50 @@ async fn handle_extension_set_enabled(
                 ApiError::new("extension_unknown").with_detail(name),
             )
         })
+}
+
+async fn handle_extension_verify(
+    State(svc): State<NamimadoService>,
+    Json(signed): Json<nami_core::extension::SignedExtension>,
+) -> Json<VerifyExtensionResponse> {
+    Json(svc.verify_signed_extension(&signed))
+}
+
+async fn handle_trustdb_list(State(svc): State<NamimadoService>) -> Json<Vec<String>> {
+    Json(svc.trustdb_keys())
+}
+
+async fn handle_trustdb_add(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<TrustdbKeyRequest>,
+) -> Result<Json<TrustdbKeyRequest>, ApiErrorResponse> {
+    let pubkey = req.public_key.clone();
+    let by = req.signed_by.clone();
+    if svc.trust_pubkey(req) {
+        Ok(Json(TrustdbKeyRequest {
+            public_key: pubkey,
+            signed_by: by,
+        }))
+    } else {
+        Err(ApiErrorResponse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::new("trustdb_locked"),
+        ))
+    }
+}
+
+async fn handle_trustdb_revoke(
+    State(svc): State<NamimadoService>,
+    Path(pubkey): Path<String>,
+) -> Result<StatusCode, ApiErrorResponse> {
+    if svc.revoke_pubkey(&pubkey) {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("trustdb_key_missing").with_detail(pubkey),
+        ))
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]

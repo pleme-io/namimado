@@ -24,7 +24,8 @@ use crate::api::{
     ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary, ExtensionToggleRequest,
     HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse, OmniboxSuggestion,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
+    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
+    VerifyExtensionResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -403,6 +404,97 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn extensions_content_hash(&self) -> String {
         String::new()
+    }
+
+    /// POST /extensions/verify — check signature + trust status.
+    #[cfg(feature = "browser-core")]
+    pub fn verify_signed_extension(
+        &self,
+        signed: &nami_core::extension::SignedExtension,
+    ) -> VerifyExtensionResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        match inner.pipeline.verify_signed_extension(signed) {
+            Ok(nami_core::extension::VerificationStatus::Trusted {
+                public_key_b64,
+                signed_by,
+            }) => VerifyExtensionResponse {
+                status: "trusted".into(),
+                public_key: Some(public_key_b64),
+                signed_by,
+                detail: None,
+            },
+            Ok(nami_core::extension::VerificationStatus::ValidButUntrusted {
+                public_key_b64,
+            }) => VerifyExtensionResponse {
+                status: "valid-but-untrusted".into(),
+                public_key: Some(public_key_b64),
+                signed_by: signed.signature.signed_by.clone(),
+                detail: Some("signature verified but key is not in the trust DB".into()),
+            },
+            Ok(nami_core::extension::VerificationStatus::Invalid(reason)) => {
+                VerifyExtensionResponse {
+                    status: "invalid".into(),
+                    public_key: None,
+                    signed_by: None,
+                    detail: Some(reason),
+                }
+            }
+            Err(e) => VerifyExtensionResponse {
+                status: "invalid".into(),
+                public_key: None,
+                signed_by: None,
+                detail: Some(e.to_string()),
+            },
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn verify_signed_extension(
+        &self,
+        _signed: &nami_core::extension::SignedExtension,
+    ) -> VerifyExtensionResponse {
+        VerifyExtensionResponse {
+            status: "invalid".into(),
+            public_key: None,
+            signed_by: None,
+            detail: Some("browser-core feature disabled".into()),
+        }
+    }
+
+    /// GET /trustdb — list of base64-encoded pubkeys.
+    #[cfg(feature = "browser-core")]
+    pub fn trustdb_keys(&self) -> Vec<String> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.trustdb_keys()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn trustdb_keys(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// POST /trustdb — add a pubkey to the trust DB.
+    #[cfg(feature = "browser-core")]
+    pub fn trust_pubkey(&self, req: TrustdbKeyRequest) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.trust_pubkey(&req.public_key)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn trust_pubkey(&self, _req: TrustdbKeyRequest) -> bool {
+        false
+    }
+
+    /// DELETE /trustdb/:pubkey — revoke.
+    #[cfg(feature = "browser-core")]
+    pub fn revoke_pubkey(&self, pubkey: &str) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.revoke_pubkey(pubkey)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn revoke_pubkey(&self, _p: &str) -> bool {
+        false
     }
 
     /// GET /omnibox?q=… — unified URL-bar autocomplete. Feeds history,
@@ -890,6 +982,77 @@ mod tests {
             .suggestions
             .iter()
             .any(|s| s.kind == "navigate" && s.action == "navigate:https://example.com"));
+    }
+
+    #[test]
+    fn verify_signed_extension_roundtrips_through_service() {
+        use nami_core::extension::{signing_key_from_seed, sign, ExtensionSpec, SignedExtension};
+        let svc = NamimadoService::new();
+
+        let key = signing_key_from_seed(&[13u8; 32]);
+        let spec = ExtensionSpec {
+            name: "smoke-ext".into(),
+            version: "1.0.0".into(),
+            description: None,
+            author: None,
+            homepage_url: None,
+            icon: None,
+            permissions: vec![],
+            host_permissions: vec![],
+            rules: vec![],
+            enabled: true,
+        };
+        let bundle = sign(&spec, &key);
+        let pubkey = bundle.public_key.clone();
+        let signed = SignedExtension { spec, signature: bundle };
+
+        // Untrusted by default.
+        let r1 = svc.verify_signed_extension(&signed);
+        assert_eq!(r1.status, "valid-but-untrusted");
+        assert_eq!(r1.public_key.as_deref(), Some(pubkey.as_str()));
+
+        // Trust + retry.
+        assert!(svc.trust_pubkey(TrustdbKeyRequest {
+            public_key: pubkey.clone(),
+            signed_by: None,
+        }));
+        let r2 = svc.verify_signed_extension(&signed);
+        assert_eq!(r2.status, "trusted");
+
+        // Revoke + retry.
+        assert!(svc.revoke_pubkey(&pubkey));
+        let r3 = svc.verify_signed_extension(&signed);
+        assert_eq!(r3.status, "valid-but-untrusted");
+    }
+
+    #[test]
+    fn verify_rejects_tampered_signed_extension() {
+        use nami_core::extension::{signing_key_from_seed, sign, ExtensionSpec, SignedExtension};
+        let svc = NamimadoService::new();
+        let key = signing_key_from_seed(&[5u8; 32]);
+        let spec = ExtensionSpec {
+            name: "tamper".into(),
+            version: "1.0.0".into(),
+            description: None,
+            author: None,
+            homepage_url: None,
+            icon: None,
+            permissions: vec![],
+            host_permissions: vec![],
+            rules: vec!["original".into()],
+            enabled: true,
+        };
+        let bundle = sign(&spec, &key);
+        let mut tampered = spec.clone();
+        tampered.rules.push("injected".into());
+        let signed = SignedExtension { spec: tampered, signature: bundle };
+        let r = svc.verify_signed_extension(&signed);
+        assert_eq!(r.status, "invalid");
+        assert!(r
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("tampered"));
     }
 
     #[test]
