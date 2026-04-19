@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>namimado · substrate inspector</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* Nord-ish palette to match irodori. */
+  :root {
+    --nord-0:  #2e3440;
+    --nord-1:  #3b4252;
+    --nord-2:  #434c5e;
+    --nord-3:  #4c566a;
+    --nord-4:  #d8dee9;
+    --nord-5:  #e5e9f0;
+    --nord-6:  #eceff4;
+    --nord-7:  #8fbcbb;
+    --nord-8:  #88c0d0;
+    --nord-9:  #81a1c1;
+    --nord-10: #5e81ac;
+    --nord-11: #bf616a;
+    --nord-12: #d08770;
+    --nord-13: #ebcb8b;
+    --nord-14: #a3be8c;
+    --nord-15: #b48ead;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--nord-0); color: var(--nord-4);
+  }
+  header {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.75rem 1rem; background: var(--nord-1);
+    border-bottom: 1px solid var(--nord-3);
+  }
+  header h1 {
+    font-size: 1rem; margin: 0; color: var(--nord-8);
+    font-weight: 600; letter-spacing: 0.02em;
+  }
+  header .meta { color: var(--nord-3); font-size: 0.8rem; margin-left: auto; }
+  form {
+    display: flex; gap: 0.5rem;
+    padding: 0.75rem 1rem; background: var(--nord-1);
+    border-bottom: 1px solid var(--nord-3);
+  }
+  input[type=text] {
+    flex: 1; padding: 0.5rem 0.75rem;
+    background: var(--nord-0); color: var(--nord-6);
+    border: 1px solid var(--nord-3); border-radius: 4px;
+    font: inherit;
+  }
+  input[type=text]:focus { outline: 2px solid var(--nord-8); outline-offset: -2px; }
+  button {
+    padding: 0.5rem 1rem; background: var(--nord-8); color: var(--nord-0);
+    border: 0; border-radius: 4px; cursor: pointer; font: inherit; font-weight: 600;
+  }
+  button:hover { background: var(--nord-7); }
+  button:disabled { opacity: 0.5; cursor: progress; }
+
+  main {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 0.75rem; padding: 0.75rem 1rem;
+  }
+  section {
+    background: var(--nord-1); border: 1px solid var(--nord-3);
+    border-radius: 6px; overflow: hidden;
+  }
+  section h2 {
+    margin: 0; padding: 0.5rem 0.75rem;
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--nord-8); background: var(--nord-2);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  section h2 .count {
+    color: var(--nord-5); background: var(--nord-3);
+    padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.7rem;
+  }
+  .body { padding: 0.5rem 0.75rem; }
+  .body.empty { color: var(--nord-3); font-style: italic; padding: 0.75rem; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; }
+  .kv dt { color: var(--nord-9); white-space: nowrap; }
+  .kv dd {
+    margin: 0; color: var(--nord-6);
+    font-family: inherit; overflow-wrap: anywhere;
+  }
+  .chip {
+    display: inline-block; margin: 0 0.25rem 0.25rem 0;
+    padding: 0.15rem 0.5rem; border-radius: 999px;
+    background: var(--nord-2); color: var(--nord-7); font-size: 0.8rem;
+  }
+  .chip .confidence { color: var(--nord-3); font-size: 0.7rem; margin-left: 0.25rem; }
+  pre {
+    margin: 0; padding: 0.5rem 0.75rem; background: var(--nord-0);
+    color: var(--nord-4); white-space: pre-wrap; font-size: 0.8rem;
+    max-height: 360px; overflow: auto;
+  }
+  .status-bar {
+    padding: 0.35rem 1rem; background: var(--nord-1);
+    border-top: 1px solid var(--nord-3);
+    font-size: 0.75rem; color: var(--nord-3);
+    display: flex; gap: 1rem;
+  }
+  .status-bar .ok { color: var(--nord-14); }
+  .status-bar .err { color: var(--nord-11); }
+  .hit { color: var(--nord-13); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>namimado · substrate inspector</h1>
+  <span class="meta" id="meta"></span>
+</header>
+
+<form id="nav">
+  <input id="url" type="text" placeholder="https://example.com"
+         value="https://example.com" autocomplete="off" autofocus>
+  <button type="submit" id="go">navigate</button>
+</form>
+
+<main>
+  <section>
+    <h2>last navigate <span class="count" id="nav-count">—</span></h2>
+    <dl class="kv body" id="nav-meta"></dl>
+  </section>
+
+  <section>
+    <h2>frameworks <span class="count" id="fw-count">—</span></h2>
+    <div class="body" id="frameworks"></div>
+  </section>
+
+  <section>
+    <h2>state cells <span class="count" id="state-count">—</span></h2>
+    <dl class="kv body" id="state"></dl>
+  </section>
+
+  <section>
+    <h2>derived values <span class="count" id="derived-count">—</span></h2>
+    <dl class="kv body" id="derived"></dl>
+  </section>
+
+  <section>
+    <h2>transforms applied <span class="count" id="tfm-count">—</span></h2>
+    <div class="body" id="transforms"></div>
+  </section>
+
+  <section>
+    <h2>substrate pipeline <span class="count">—</span></h2>
+    <dl class="kv body" id="pipeline"></dl>
+  </section>
+</main>
+
+<div class="status-bar">
+  <span id="status">idle</span>
+  <span style="margin-left:auto">server: <span id="server">?</span></span>
+  <span>spec: <a style="color:var(--nord-8)" href="/openapi.yaml">openapi.yaml</a> · <a style="color:var(--nord-8)" href="/openapi.json">json</a></span>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let pollTimer = null;
+
+async function getJSON(path, init) {
+  const r = await fetch(path, init);
+  if (!r.ok && r.status !== 404) {
+    const text = await r.text();
+    throw new Error(`${path} → ${r.status} ${text.slice(0,200)}`);
+  }
+  return r.status === 404 ? null : r.json();
+}
+
+function renderKv(el, pairs) {
+  el.innerHTML = '';
+  if (!pairs || pairs.length === 0) {
+    el.innerHTML = '<dd class="empty">—</dd>';
+    return;
+  }
+  for (const [k, v] of pairs) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = typeof v === 'string' ? v : JSON.stringify(v);
+    el.appendChild(dt); el.appendChild(dd);
+  }
+}
+
+function renderFrameworks(hits) {
+  const el = $('frameworks');
+  if (!hits || hits.length === 0) {
+    el.innerHTML = '<span class="empty">none detected</span>';
+    $('fw-count').textContent = '0';
+    return;
+  }
+  el.innerHTML = hits.map(h =>
+    `<span class="chip">${h.name}<span class="confidence">${(h.confidence * 100 | 0)}%</span></span>`
+  ).join('');
+  $('fw-count').textContent = String(hits.length);
+}
+
+function renderTransforms(hits) {
+  const el = $('transforms');
+  if (!hits || hits.length === 0) {
+    el.innerHTML = '<span class="empty">none</span>';
+    $('tfm-count').textContent = '0';
+    return;
+  }
+  el.innerHTML = hits.map(h => `<div class="hit">• ${h}</div>`).join('');
+  $('tfm-count').textContent = String(hits.length);
+}
+
+async function refreshStatus() {
+  try {
+    const s = await getJSON('/status');
+    $('server').textContent = `${s.service} ${s.version} (${(s.features || []).join(', ')})`;
+  } catch (e) { $('server').textContent = 'unreachable'; }
+}
+
+async function refreshState() {
+  const cells = await getJSON('/state');
+  renderKv($('state'), (cells || []).map(c => [c.name, c.value]));
+  $('state-count').textContent = String((cells || []).length);
+}
+
+async function refreshReport() {
+  const r = await getJSON('/report');
+  if (!r) {
+    $('pipeline').innerHTML = '<dd class="empty">no navigate yet</dd>';
+    $('derived-count').textContent = '0';
+    renderFrameworks([]);
+    renderTransforms([]);
+    return;
+  }
+  renderKv($('pipeline'), [
+    ['effects fired', r.effects_fired],
+    ['agents fired', r.agents_fired],
+    ['transforms applied', r.transforms_applied],
+    ['route matched', r.routes_matched || '—'],
+    ['queries dispatched', (r.queries_dispatched || []).join(', ') || '—'],
+  ]);
+  renderFrameworks(r.frameworks || []);
+  renderTransforms(r.transform_hits || []);
+  const derived = (r.derived_snapshot || []).map(c => [c.name, c.value]);
+  renderKv($('derived'), derived);
+  $('derived-count').textContent = String(derived.length);
+}
+
+async function refreshAll() {
+  try {
+    await Promise.all([refreshStatus(), refreshState(), refreshReport()]);
+    $('status').innerHTML = `<span class="ok">ok</span> · last tick ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    $('status').innerHTML = `<span class="err">${e.message}</span>`;
+  }
+}
+
+$('nav').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const url = $('url').value.trim();
+  if (!url) return;
+  $('go').disabled = true;
+  $('status').textContent = `navigating to ${url} …`;
+  try {
+    const resp = await getJSON('/navigate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    $('nav-count').textContent = `${resp.fetched_bytes}B`;
+    renderKv($('nav-meta'), [
+      ['final url', resp.final_url],
+      ['title', resp.title || '—'],
+      ['bytes', resp.fetched_bytes],
+    ]);
+    await refreshAll();
+  } catch (e) {
+    $('status').innerHTML = `<span class="err">${e.message}</span>`;
+  } finally {
+    $('go').disabled = false;
+  }
+});
+
+refreshAll();
+pollTimer = setInterval(refreshAll, 2000);
+</script>
+</body>
+</html>

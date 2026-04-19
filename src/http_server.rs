@@ -7,8 +7,8 @@
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    http::{StatusCode, header},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use std::net::SocketAddr;
@@ -22,19 +22,27 @@ use crate::service::NamimadoService;
 #[must_use]
 pub fn router(service: NamimadoService) -> Router {
     Router::new()
+        // API surface — mirrors openapi.yaml exactly.
         .route("/status", get(handle_status))
         .route("/navigate", post(handle_navigate))
         .route("/report", get(handle_report))
         .route("/state", get(handle_state))
         .route("/openapi.yaml", get(handle_openapi_yaml))
         .route("/openapi.json", get(handle_openapi_json))
+        // Inspector SPA — polls the API, shows substrate live.
+        .route("/", get(|| async { Redirect::permanent("/ui") }))
+        .route("/ui", get(handle_inspector))
         .with_state(service)
 }
 
 pub async fn serve(service: NamimadoService, addr: SocketAddr) -> anyhow::Result<()> {
     let app = router(service);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!(%addr, "namimado HTTP server listening");
+    let bound = listener.local_addr().unwrap_or(addr);
+    info!(%bound, "namimado HTTP server listening");
+    eprintln!("  inspector UI   http://{bound}/ui");
+    eprintln!("  openapi spec   http://{bound}/openapi.yaml");
+    eprintln!("  navigate tool  curl -XPOST http://{bound}/navigate -d '{{\"url\":\"…\"}}'");
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -83,9 +91,16 @@ async fn handle_state(State(svc): State<NamimadoService>) -> Json<Vec<StateCellV
 
 async fn handle_openapi_yaml() -> impl IntoResponse {
     (
-        [(axum::http::header::CONTENT_TYPE, "application/yaml")],
+        [(header::CONTENT_TYPE, "application/yaml")],
         include_str!("../openapi.yaml"),
     )
+}
+
+/// Substrate inspector SPA. Static HTML+JS that polls /state, /report,
+/// /status every 2s and lets the user navigate by POSTing to /navigate.
+/// Same HTTP surface any other client uses — dogfooded visibility.
+async fn handle_inspector() -> Html<&'static str> {
+    Html(include_str!("../assets/inspector.html"))
 }
 
 async fn handle_openapi_json() -> Result<Json<serde_json::Value>, ApiErrorResponse> {
