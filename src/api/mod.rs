@@ -84,6 +84,10 @@ pub struct ReportResponse {
     /// Inline `<l-eval>` macros processed on this page.
     pub inline_lisp_evaluated: usize,
     pub inline_lisp_failed: usize,
+    /// `(defnormalize …)` rewrites applied. Each entry is
+    /// `"rule-name : old-tag → new-tag"`.
+    pub normalize_applied: usize,
+    pub normalize_hits: Vec<String>,
 }
 
 impl ReportResponse {
@@ -124,6 +128,8 @@ impl ReportResponse {
                 .collect(),
             inline_lisp_evaluated: r.inline_lisp_evaluated,
             inline_lisp_failed: r.inline_lisp_failed,
+            normalize_applied: r.normalize_applied,
+            normalize_hits: r.normalize_hits.clone(),
         }
     }
 }
@@ -161,5 +167,60 @@ impl ApiError {
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn navigate_response_serializes_all_surfaces() {
+        // The wire format must contain every field surfaced via HTTP,
+        // MCP, and the inspector UI — no silent drops when a new field
+        // is added to the domain type.
+        let resp = NavigateResponse {
+            final_url: "https://example.com/".into(),
+            fetched_bytes: 512,
+            title: Some("Example".into()),
+            text_render: "some body".into(),
+            dom_sexp: "(document)".into(),
+            report: ReportResponse {
+                frameworks: vec![FrameworkHit { name: "React".into(), confidence: 0.9 }],
+                routes_matched: None,
+                queries_dispatched: vec![],
+                effects_fired: 2,
+                agents_fired: 0,
+                transforms_applied: 1,
+                transform_hits: vec!["x".into()],
+                state_snapshot: vec![],
+                derived_snapshot: vec![],
+                inline_lisp_evaluated: 3,
+                inline_lisp_failed: 0,
+                normalize_applied: 5,
+                normalize_hits: vec!["rule-a : div → n-card".into()],
+            },
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        // Every field worth observing is in the JSON.
+        assert!(json.contains("text_render"));
+        assert!(json.contains("dom_sexp"));
+        assert!(json.contains("inline_lisp_evaluated"));
+        assert!(json.contains("normalize_applied"));
+        assert!(json.contains("rule-a : div → n-card"));
+
+        // Roundtrip.
+        let back: NavigateResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.report.normalize_applied, 5);
+        assert_eq!(back.report.inline_lisp_evaluated, 3);
+    }
+
+    #[test]
+    fn api_error_with_detail_roundtrips() {
+        let e = ApiError::new("bad_url").with_detail("scheme missing");
+        let json = serde_json::to_string(&e).unwrap();
+        let back: ApiError = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.error, "bad_url");
+        assert_eq!(back.detail.as_deref(), Some("scheme missing"));
     }
 }

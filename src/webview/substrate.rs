@@ -33,6 +33,7 @@ use nami_core::component::ComponentRegistry;
 use nami_core::derived::DerivedRegistry;
 use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
+use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
 use nami_core::predicate::PredicateRegistry;
 use nami_core::query::QueryRegistry;
@@ -60,6 +61,9 @@ pub struct SubstrateReport {
     /// macros processed this pass.
     pub inline_lisp_evaluated: usize,
     pub inline_lisp_failed: usize,
+    /// Canonical-form rewrites applied by `(defnormalize …)` rules.
+    pub normalize_applied: usize,
+    pub normalize_hits: Vec<String>,
 }
 
 /// The outcome of navigating to a URL.
@@ -88,6 +92,7 @@ pub struct SubstratePipeline {
     queries: QueryRegistry,
     derived: DerivedRegistry,
     components: ComponentRegistry,
+    normalize_rules: NormalizeRegistry,
 
     transforms: Vec<DomTransformSpec>,
     aliases: AliasRegistry,
@@ -133,6 +138,8 @@ impl SubstratePipeline {
         derived.extend(nami_core::derived::compile(&ext_src).unwrap_or_default());
         let mut components = ComponentRegistry::new();
         components.extend(nami_core::component::compile(&ext_src).unwrap_or_default());
+        let mut normalize_rules = NormalizeRegistry::new();
+        normalize_rules.extend(nami_core::normalize::compile(&ext_src).unwrap_or_default());
 
         let transforms = nami_core::transform::compile(&tfm_src).unwrap_or_default();
         let mut aliases = AliasRegistry::new();
@@ -147,7 +154,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -159,6 +166,7 @@ impl SubstratePipeline {
             components.len(),
             transforms.len(),
             aliases.len(),
+            normalize_rules.len(),
         );
 
         Self {
@@ -170,6 +178,7 @@ impl SubstratePipeline {
             queries,
             derived,
             components,
+            normalize_rules,
             transforms,
             aliases,
             state_store,
@@ -197,9 +206,21 @@ impl SubstratePipeline {
         let detections = nami_core::framework::detect(&doc);
         let page_state = nami_core::state::extract(&doc);
 
+        // Phase 0.25 — canonicalize detected framework idioms into the
+        // shared n-* vocabulary so downstream transforms, scrapes, and
+        // agents author against one shape.
+        let norm_report =
+            nami_core::normalize::apply(&mut doc, &self.normalize_rules, &detections);
+
         let mut report = SubstrateReport::default();
         report.inline_lisp_evaluated = inline_report.evaluated;
         report.inline_lisp_failed = inline_report.failed;
+        report.normalize_applied = norm_report.applied();
+        report.normalize_hits = norm_report
+            .hits
+            .iter()
+            .map(|h| format!("{} : {} → {}", h.rule, h.from_tag, h.to_tag))
+            .collect();
         report.frameworks = detections
             .iter()
             .map(|d| (format!("{:?}", d.framework), d.confidence))

@@ -140,6 +140,10 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
         "inline-lisp:    {} ok · {} err",
         r.inline_lisp_evaluated, r.inline_lisp_failed
     );
+    println!("normalize:      {} applied", r.normalize_applied);
+    for hit in &r.normalize_hits {
+        println!("  · {hit}");
+    }
     for hit in &r.transform_hits {
         println!("  • {hit}");
     }

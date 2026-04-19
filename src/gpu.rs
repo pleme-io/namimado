@@ -488,6 +488,10 @@ fn format_inspector(resp: &crate::api::NavigateResponse) -> String {
         "inline-lisp {} ok · {} err\n",
         r.inline_lisp_evaluated, r.inline_lisp_failed
     ));
+    out.push_str(&format!("normalize   {}\n", r.normalize_applied));
+    for hit in r.normalize_hits.iter().take(10) {
+        out.push_str(&format!("  · {hit}\n"));
+    }
     if let Some(route) = &r.routes_matched {
         out.push_str(&format!("route       {route}\n"));
     }
