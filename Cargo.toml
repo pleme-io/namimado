@@ -8,10 +8,14 @@ description = "Desktop web browser — Servo engine + garasu chrome"
 repository = "https://github.com/pleme-io/namimado"
 
 [features]
-default = []
-full = ["browser-core", "gpu-chrome"]
+default = ["browser-core", "http-server"]
+full = ["browser-core", "gpu-chrome", "http-server"]
 browser-core = ["dep:nami-core", "dep:reqwest"]
 gpu-chrome = ["dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi"]
+# HTTP REST server — one face of the multi-face API. OpenAPI spec at
+# ./openapi.yaml is the source of truth; this feature wires axum
+# handlers to the shared `service::NamimadoService`.
+http-server = ["dep:axum"]
 
 [dependencies]
 # Browser core (shared with aranami) — DOM + CSS + layout + Lisp substrate.
@@ -19,6 +23,9 @@ gpu-chrome = ["dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi"]
 # agent, state, effect, derived, query, route, component.
 nami-core = { git = "ssh://git@github.com/pleme-io/nami-core", branch = "main", features = ["lisp", "eval"], optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
+
+# HTTP server (one face of the multi-face API)
+axum = { version = "0.8", optional = true }
 
 # GPU browser chrome
 garasu = { git = "https://github.com/pleme-io/garasu", optional = true }

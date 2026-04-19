@@ -169,6 +169,13 @@ impl SubstratePipeline {
         }
     }
 
+    /// Live snapshot of the state store (accumulates across navigates).
+    /// The HTTP/MCP surfaces expose this as `GET /state`.
+    #[must_use]
+    pub fn state_snapshot(&self) -> Vec<(String, Value)> {
+        self.state_store.snapshot().into_iter().collect()
+    }
+
     pub fn navigate(&mut self, url: &Url) -> Result<NavigateOutcome> {
         let body = self.fetch(url)?;
         let mut doc = Document::parse(&body);

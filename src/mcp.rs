@@ -16,6 +16,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::config::NamimadoConfig;
+use crate::service::NamimadoService;
 
 // ---------------------------------------------------------------------------
 // Request types
@@ -77,6 +78,7 @@ struct ConfigSetRequest {
 pub struct NamimadoMcpServer {
     tool_router: ToolRouter<Self>,
     config: NamimadoConfig,
+    service: NamimadoService,
 }
 
 impl std::fmt::Debug for NamimadoMcpServer {
@@ -91,19 +93,19 @@ impl NamimadoMcpServer {
         Self {
             tool_router: Self::tool_router(),
             config,
+            service: NamimadoService::new(),
         }
     }
 
     // -- Standard tools --
 
-    #[tool(description = "Get Namimado browser status.")]
+    #[tool(description = "Namimado status — version, enabled features, last URL fetched.")]
     async fn status(&self) -> Result<CallToolResult, McpError> {
-        Ok(ToolResponse::success(&serde_json::json!({
-            "status": "running",
-            "homepage": self.config.homepage,
-            "devtools_enabled": self.config.devtools_enabled,
-            "dark_mode": self.config.theme.dark,
-        })))
+        // Delegates to NamimadoService — byte-identical with GET /status.
+        let status = self.service.status();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&status).unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "Get the Namimado version.")]
@@ -170,16 +172,61 @@ impl NamimadoMcpServer {
         })))
     }
 
-    #[tool(description = "Navigate the active tab to a URL.")]
+    #[tool(
+        description = "Navigate to a URL and run the full nami-core Lisp substrate \
+                       pipeline (framework detect → route match → query dispatch → \
+                       derived-aware effects → agent decisions → component + alias \
+                       expansion → transform apply). Returns the structured report — \
+                       byte-identical with POST /navigate on the HTTP surface."
+    )]
     async fn navigate(
         &self,
         Parameters(req): Parameters<NavigateRequest>,
     ) -> Result<CallToolResult, McpError> {
-        Ok(ToolResponse::success(&serde_json::json!({
-            "action": "navigate",
-            "url": req.url,
-            "note": "Navigation requires a running browser instance.",
-        })))
+        let svc = self.service.clone();
+        let url = req.url.clone();
+        // Hop onto blocking pool — SubstratePipeline uses reqwest::blocking
+        // internally; it panics inside a tokio async context.
+        let result = tokio::task::spawn_blocking(move || {
+            svc.navigate(crate::api::NavigateRequest { url })
+        })
+        .await;
+        match result {
+            Ok(Ok(resp)) => Ok(ToolResponse::success(
+                &serde_json::to_value(&resp).unwrap_or_default(),
+            )),
+            Ok(Err(e)) => Ok(ToolResponse::error(&format!("navigate_failed: {e}"))),
+            Err(e) => Ok(ToolResponse::error(&format!("join_error: {e}"))),
+        }
+    }
+
+    #[tool(
+        description = "Fetch the structured substrate report from the most recent \
+                       navigate. Returns state cells, derived values, effects fired, \
+                       agents fired, transforms applied, detected frameworks. Same \
+                       payload as GET /report on the HTTP surface."
+    )]
+    async fn get_last_report(&self) -> Result<CallToolResult, McpError> {
+        match self.service.last_report() {
+            Some(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(
+                "no_navigate_yet: call the navigate tool first",
+            )),
+        }
+    }
+
+    #[tool(
+        description = "Current Lisp substrate state-store snapshot. Every (defstate …) \
+                       cell's current value, accumulating across every navigate. Same \
+                       payload as GET /state on the HTTP surface."
+    )]
+    async fn get_state(&self) -> Result<CallToolResult, McpError> {
+        let cells = self.service.state_snapshot();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&cells).unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List all open tabs with their URLs and titles.")]

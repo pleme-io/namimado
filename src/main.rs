@@ -1,12 +1,16 @@
+mod api;
 mod app;
 mod browser;
 mod chrome;
 mod config;
+#[cfg(feature = "http-server")]
+mod http_server;
 mod input;
 mod ipc;
 mod mcp;
 mod render;
 mod scripting;
+mod service;
 mod webview;
 
 use clap::Parser;
@@ -30,6 +34,15 @@ struct Cli {
 enum Commands {
     /// Start the MCP server (stdio transport).
     Mcp,
+    /// Start the HTTP REST API server. Spec: ./openapi.yaml. All
+    /// endpoints delegate into the same `NamimadoService` that MCP
+    /// tools use — one spec, many faces.
+    #[cfg(feature = "http-server")]
+    Serve {
+        /// Bind address. Defaults to 127.0.0.1:7860.
+        #[arg(long, default_value = "127.0.0.1:7860")]
+        addr: String,
+    },
     /// Fetch a URL, run the full nami-core Lisp substrate pipeline
     /// (transforms + effects + derived + agents + components), and
     /// print what fired. Headless — no window, no GPU. Useful for
@@ -60,6 +73,16 @@ fn main() -> anyhow::Result<()> {
             });
             Ok(())
         }
+        #[cfg(feature = "http-server")]
+        Some(Commands::Serve { addr }) => {
+            let addr: std::net::SocketAddr = addr.parse()?;
+            // Construct service BEFORE the tokio runtime — nami-core's
+            // blocking reqwest client can't be initialised inside an
+            // async context (it spins up its own nested runtime).
+            let service = crate::service::NamimadoService::new();
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(crate::http_server::serve(service, addr))
+        }
         #[cfg(feature = "browser-core")]
         Some(Commands::Navigate { url }) => run_headless_navigate(&url),
         None => app::run(&cli.url, cli.devtools),
@@ -68,22 +91,22 @@ fn main() -> anyhow::Result<()> {
 
 #[cfg(feature = "browser-core")]
 fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
-    let parsed = url::Url::parse(url)
-        .or_else(|_| url::Url::parse(&format!("https://{url}")))?;
-    let mut pipeline = crate::webview::substrate::SubstratePipeline::load();
-    let outcome = pipeline
-        .navigate(&parsed)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    use crate::api::NavigateRequest;
+
+    let service = crate::service::NamimadoService::new();
+    let resp = service.navigate(NavigateRequest {
+        url: url.to_owned(),
+    })?;
 
     println!("────────────────────────────────────────");
-    println!(" namimado navigate  {}", outcome.final_url);
-    println!(" {} bytes fetched", outcome.fetched_bytes);
-    if let Some(t) = &outcome.title {
+    println!(" namimado navigate  {}", resp.final_url);
+    println!(" {} bytes fetched", resp.fetched_bytes);
+    if let Some(t) = &resp.title {
         println!(" title: {t}");
     }
     println!("────────────────────────────────────────");
 
-    let r = &outcome.report;
+    let r = &resp.report;
     if let Some(route) = &r.routes_matched {
         println!("route matched:  {route}");
     }
@@ -94,7 +117,7 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
         let fws: Vec<String> = r
             .frameworks
             .iter()
-            .map(|(f, c)| format!("{f} ({c:.2})"))
+            .map(|f| format!("{} ({:.2})", f.name, f.confidence))
             .collect();
         println!("frameworks:     {}", fws.join(", "));
     }
@@ -106,14 +129,14 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
     }
     if !r.state_snapshot.is_empty() {
         println!("state cells:");
-        for (k, v) in &r.state_snapshot {
-            println!("  {k} = {v}");
+        for cell in &r.state_snapshot {
+            println!("  {} = {}", cell.name, cell.value);
         }
     }
     if !r.derived_snapshot.is_empty() {
         println!("derived values:");
-        for (k, v) in &r.derived_snapshot {
-            println!("  {k} = {v}");
+        for cell in &r.derived_snapshot {
+            println!("  {} = {}", cell.name, cell.value);
         }
     }
     Ok(())
