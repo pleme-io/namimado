@@ -2672,9 +2672,11 @@ dependencies = [
  "dirs",
  "egaku",
  "garasu",
+ "glyphon",
  "irodzuki",
  "kaname",
  "nami-core",
+ "pollster",
  "reqwest",
  "schemars 1.2.1",
  "serde",
@@ -2688,6 +2690,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "wgpu",
  "winit",
 ]
 

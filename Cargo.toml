@@ -8,10 +8,13 @@ description = "Desktop web browser — Servo engine + garasu chrome"
 repository = "https://github.com/pleme-io/namimado"
 
 [features]
-default = ["browser-core", "http-server"]
+default = ["browser-core", "http-server", "gpu-chrome"]
 full = ["browser-core", "gpu-chrome", "http-server"]
 browser-core = ["dep:nami-core", "dep:reqwest"]
-gpu-chrome = ["dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi"]
+gpu-chrome = [
+  "dep:garasu", "dep:egaku", "dep:irodzuki", "dep:shikumi",
+  "dep:wgpu", "dep:glyphon", "dep:pollster",
+]
 # HTTP REST server — one face of the multi-face API. OpenAPI spec at
 # ./openapi.yaml is the source of truth; this feature wires axum
 # handlers to the shared `service::NamimadoService`.
@@ -26,6 +29,11 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 
 # HTTP server (one face of the multi-face API)
 axum = { version = "0.8", optional = true }
+
+# Native GPU window — used by `gpu-chrome`, versions pinned to garasu's.
+wgpu = { version = "25", optional = true }
+glyphon = { version = "0.9", optional = true }
+pollster = { version = "0.4", optional = true }
 
 # GPU browser chrome
 garasu = { git = "https://github.com/pleme-io/garasu", optional = true }

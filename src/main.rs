@@ -3,6 +3,8 @@ mod app;
 mod browser;
 mod chrome;
 mod config;
+#[cfg(feature = "gpu-chrome")]
+mod gpu;
 #[cfg(feature = "http-server")]
 mod http_server;
 mod input;
@@ -85,8 +87,18 @@ fn main() -> anyhow::Result<()> {
         }
         #[cfg(feature = "browser-core")]
         Some(Commands::Navigate { url }) => run_headless_navigate(&url),
-        None => app::run(&cli.url, cli.devtools),
+        None => run_default(&cli.url, cli.devtools),
     }
+}
+
+#[cfg(feature = "gpu-chrome")]
+fn run_default(initial_url: &str, _devtools: bool) -> anyhow::Result<()> {
+    gpu::run(initial_url)
+}
+
+#[cfg(not(feature = "gpu-chrome"))]
+fn run_default(initial_url: &str, devtools: bool) -> anyhow::Result<()> {
+    app::run(initial_url, devtools)
 }
 
 #[cfg(feature = "browser-core")]
