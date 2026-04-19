@@ -92,6 +92,9 @@ pub struct ReportResponse {
     /// `"rule-name : old-tag → new-tag"`.
     pub normalize_applied: usize,
     pub normalize_hits: Vec<String>,
+    /// WASM agents that ran successfully on this navigate.
+    pub wasm_agents_fired: usize,
+    pub wasm_agent_hits: Vec<String>,
 }
 
 impl ReportResponse {
@@ -134,6 +137,8 @@ impl ReportResponse {
             inline_lisp_failed: r.inline_lisp_failed,
             normalize_applied: r.normalize_applied,
             normalize_hits: r.normalize_hits.clone(),
+            wasm_agents_fired: r.wasm_agents_fired,
+            wasm_agent_hits: r.wasm_agent_hits.clone(),
         }
     }
 }
@@ -185,6 +190,7 @@ pub struct RulesInventory {
     pub normalize_rules: Vec<String>,
     pub transforms: Vec<String>,
     pub aliases: Vec<String>,
+    pub wasm_agents: Vec<String>,
 }
 
 /// Uniform error shape returned by every API surface.
@@ -239,6 +245,8 @@ mod tests {
                 inline_lisp_failed: 0,
                 normalize_applied: 5,
                 normalize_hits: vec!["rule-a : div → n-card".into()],
+                wasm_agents_fired: 2,
+                wasm_agent_hits: vec!["scraper → 128 bytes (fuel=4000 ms=3)".into()],
             },
         };
         let json = serde_json::to_string(&resp).unwrap();
@@ -248,6 +256,8 @@ mod tests {
         assert!(json.contains("inline_lisp_evaluated"));
         assert!(json.contains("normalize_applied"));
         assert!(json.contains("rule-a : div → n-card"));
+        assert!(json.contains("wasm_agents_fired"));
+        assert!(json.contains("128 bytes"));
 
         // Roundtrip.
         let back: NavigateResponse = serde_json::from_str(&json).unwrap();

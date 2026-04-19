@@ -290,6 +290,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 13, "13 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 14, "14 DSL keywords expected in nami-core");
     }
 }

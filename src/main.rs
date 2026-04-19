@@ -145,6 +145,10 @@ fn run_headless_navigate(url: &str) -> anyhow::Result<()> {
     for hit in &r.normalize_hits {
         println!("  · {hit}");
     }
+    println!("wasm-agents:    {} fired", r.wasm_agents_fired);
+    for hit in &r.wasm_agent_hits {
+        println!("  · {hit}");
+    }
     for hit in &r.transform_hits {
         println!("  • {hit}");
     }

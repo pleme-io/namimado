@@ -35,6 +35,9 @@ use nami_core::dom::Document;
 use nami_core::effect::EffectRegistry;
 use nami_core::normalize::NormalizeRegistry;
 use nami_core::plan::PlanRegistry;
+use nami_core::wasm::{WasmAgentContext, WasmHost};
+use nami_core::wasm_agent::{WasmAgentRegistry, WasmAgentSpec};
+use std::sync::Arc;
 use nami_core::predicate::PredicateRegistry;
 use nami_core::query::QueryRegistry;
 use nami_core::route::RouteRegistry;
@@ -64,6 +67,10 @@ pub struct SubstrateReport {
     /// Canonical-form rewrites applied by `(defnormalize …)` rules.
     pub normalize_applied: usize,
     pub normalize_hits: Vec<String>,
+    /// `(defwasm-agent …)` scrapers that fired. Each entry is
+    /// `"name → N bytes (fuel=F ms=M)"`.
+    pub wasm_agents_fired: usize,
+    pub wasm_agent_hits: Vec<String>,
 }
 
 /// The outcome of navigating to a URL.
@@ -93,6 +100,8 @@ pub struct SubstratePipeline {
     derived: DerivedRegistry,
     components: ComponentRegistry,
     normalize_rules: NormalizeRegistry,
+    wasm_agents: WasmAgentRegistry,
+    wasm_host: Option<WasmHost>,
 
     transforms: Vec<DomTransformSpec>,
     aliases: AliasRegistry,
@@ -112,6 +121,7 @@ pub struct SubstratePipeline {
     component_names: Vec<String>,
     normalize_names: Vec<String>,
     alias_names: Vec<String>,
+    wasm_agent_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -201,6 +211,27 @@ impl SubstratePipeline {
         let mut normalize_rules = NormalizeRegistry::new();
         normalize_rules.extend(normalize_specs);
 
+        let wasm_agent_specs: Vec<WasmAgentSpec> =
+            nami_core::wasm_agent::compile(&ext_src).unwrap_or_default();
+        let wasm_agent_names: Vec<String> =
+            wasm_agent_specs.iter().map(|s| s.name.clone()).collect();
+        let mut wasm_agents = WasmAgentRegistry::new();
+        wasm_agents.extend(wasm_agent_specs);
+
+        // Spin up one WasmHost we'll reuse across navigates — the JIT
+        // cost is only paid once per process.
+        let wasm_host = if wasm_agents.is_empty() {
+            None
+        } else {
+            match WasmHost::new() {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    warn!("WasmHost init failed, wasm agents disabled: {e}");
+                    None
+                }
+            }
+        };
+
         let transforms = nami_core::transform::compile(&tfm_src).unwrap_or_default();
 
         let alias_specs = nami_core::alias::compile(&alias_src).unwrap_or_default();
@@ -217,7 +248,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -230,6 +261,7 @@ impl SubstratePipeline {
             transforms.len(),
             aliases.len(),
             normalize_rules.len(),
+            wasm_agents.len(),
         );
 
         Self {
@@ -242,6 +274,8 @@ impl SubstratePipeline {
             derived,
             components,
             normalize_rules,
+            wasm_agents,
+            wasm_host,
             transforms,
             aliases,
             state_store,
@@ -256,6 +290,7 @@ impl SubstratePipeline {
             component_names,
             normalize_names,
             alias_names,
+            wasm_agent_names,
         }
     }
 
@@ -283,6 +318,7 @@ impl SubstratePipeline {
             normalize_rules: self.normalize_names.clone(),
             transforms: self.transforms.iter().map(|s| s.name.clone()).collect(),
             aliases: self.alias_names.clone(),
+            wasm_agents: self.wasm_agent_names.clone(),
         }
     }
 
@@ -314,6 +350,38 @@ impl SubstratePipeline {
             .iter()
             .map(|h| format!("{} : {} → {}", h.rule, h.from_tag, h.to_tag))
             .collect();
+
+        // Phase 0.4 — dispatch (defwasm-agent) scrapers. Each runs
+        // against a read-only snapshot of the current doc. Output
+        // bytes land in the report; failures log + continue.
+        if !self.wasm_agents.is_empty() {
+            if let Some(host) = &self.wasm_host {
+                let snapshot = Arc::new(doc.clone());
+                let cx = WasmAgentContext::with_snapshot(snapshot);
+                let wasm_dir = wasm_agent_dir();
+                let reports = nami_core::wasm_agent::run(
+                    &self.wasm_agents,
+                    "page-load",
+                    host,
+                    &cx,
+                    |path| resolve_wasm_path(&wasm_dir, path),
+                );
+                report.wasm_agents_fired = reports.iter().filter(|r| r.ok()).count();
+                report.wasm_agent_hits = reports
+                    .iter()
+                    .map(|r| match &r.outcome {
+                        Ok(out) => format!(
+                            "{} → {} bytes (fuel={} ms={})",
+                            r.name,
+                            out.len(),
+                            r.fuel_used,
+                            r.duration_ms
+                        ),
+                        Err(e) => format!("{} FAILED: {}", r.name, e),
+                    })
+                    .collect();
+            }
+        }
         report.frameworks = detections
             .iter()
             .map(|d| (format!("{:?}", d.framework), d.confidence))
@@ -481,6 +549,31 @@ impl SubstratePipeline {
             .with_context(|| format!("read body from {url}"))?;
         Ok(body)
     }
+}
+
+fn wasm_agent_dir() -> PathBuf {
+    config_dir()
+        .map(|d| d.join("wasm"))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Resolve a `:wasm` path to bytes under a strict policy:
+///   · absolute paths used verbatim
+///   · relative paths joined under `$XDG_CONFIG_HOME/namimado/wasm/`
+///   · no traversal outside that directory when relative
+fn resolve_wasm_path(wasm_dir: &Path, path: &str) -> Result<Vec<u8>, String> {
+    let p = Path::new(path);
+    let resolved = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        // Reject `..` traversal in relative paths — relative means
+        // "inside the wasm agents dir."
+        if path.split('/').any(|seg| seg == "..") {
+            return Err(format!("path traversal rejected: {path}"));
+        }
+        wasm_dir.join(path)
+    };
+    std::fs::read(&resolved).map_err(|e| format!("read {resolved:?}: {e}"))
 }
 
 fn config_dir() -> Option<PathBuf> {
