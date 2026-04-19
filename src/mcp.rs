@@ -109,6 +109,16 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct StorageByIndexRequest {
+    store: String,
+    /// Dot-path matching a declared (defstorage :indexes) entry.
+    path: String,
+    /// Projected value to match. Strings, ints, bools are
+    /// normalized to their display form at index time.
+    value: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct StorageStoreRequest {
     /// Store name, as declared by `(defstorage :name …)`.
     store: String,
@@ -655,6 +665,49 @@ impl NamimadoMcpServer {
                 "extension_unknown: {}",
                 req.name
             )))
+        }
+    }
+
+    #[tool(
+        description = "List every declared (defstorage :indexes …) path for a \
+                       store plus the distinct projected values present now. \
+                       Same payload as GET /storage/:name/index."
+    )]
+    async fn storage_index_list(
+        &self,
+        Parameters(req): Parameters<StorageStoreRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.storage_index_summary(&req.store) {
+            Some(v) => Ok(ToolResponse::success(
+                &serde_json::to_value(&v).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(&format!(
+                "storage_unknown: {}",
+                req.store
+            ))),
+        }
+    }
+
+    #[tool(
+        description = "Query a (defstorage) secondary index — every entry \
+                       whose projected value at `path` equals `value`. O(log n) \
+                       lookup, same payload as GET /storage/:name/index/:path?value=…"
+    )]
+    async fn storage_by_index(
+        &self,
+        Parameters(req): Parameters<StorageByIndexRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .service
+            .storage_by_index(&req.store, &req.path, &req.value)
+        {
+            Some(v) => Ok(ToolResponse::success(
+                &serde_json::to_value(&v).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(&format!(
+                "storage_or_index_unknown: {}/{}",
+                req.store, req.path
+            ))),
         }
     }
 

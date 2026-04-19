@@ -579,6 +579,60 @@ impl NamimadoService {
         }
     }
 
+    /// GET /storage/:name/index — list every declared index and its
+    /// distinct projected values. Useful for range scans + inspector
+    /// surfaces.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_index_summary(&self, store: &str) -> Option<Vec<crate::api::StorageIndexSummary>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let s = inner.pipeline.get_store(store)?;
+        let paths = s.index_paths();
+        Some(
+            paths
+                .into_iter()
+                .map(|p| crate::api::StorageIndexSummary {
+                    distinct_values: s.index_values(&p).unwrap_or_default(),
+                    path: p,
+                })
+                .collect(),
+        )
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_index_summary(&self, _s: &str) -> Option<Vec<crate::api::StorageIndexSummary>> {
+        None
+    }
+
+    /// GET /storage/:name/index/:path?value=V — every entry whose
+    /// projected value at `path` equals V. Returns None when the
+    /// store or path isn't declared.
+    #[cfg(feature = "browser-core")]
+    pub fn storage_by_index(
+        &self,
+        store: &str,
+        path: &str,
+        value: &str,
+    ) -> Option<Vec<StorageEntry>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let s = inner.pipeline.get_store(store)?;
+        let hits = s.by_index(path, value)?;
+        Some(
+            hits.into_iter()
+                .map(|(key, value)| StorageEntry { key, value })
+                .collect(),
+        )
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_by_index(
+        &self,
+        _s: &str,
+        _p: &str,
+        _v: &str,
+    ) -> Option<Vec<StorageEntry>> {
+        None
+    }
+
     /// GET /commands — full command+binding inventory.
     #[cfg(feature = "browser-core")]
     pub fn commands_list(&self) -> Vec<CommandInfo> {

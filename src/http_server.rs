@@ -20,8 +20,8 @@ use crate::api::{
     DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
     ExtensionToggleRequest, HistoryInfo, NavigateRequest, NavigateResponse, OmniboxResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, StateCellValue,
-    StatusResponse, StorageEntry, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
-    VerifyExtensionResponse,
+    StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest, StorageSummary,
+    TrustdbKeyRequest, VerifyExtensionResponse,
 };
 use crate::service::NamimadoService;
 
@@ -53,6 +53,11 @@ pub fn router(service: NamimadoService) -> Router {
             get(handle_storage_read)
                 .post(handle_storage_set)
                 .delete(handle_storage_delete),
+        )
+        .route("/storage/:name/index", get(handle_storage_index_list))
+        .route(
+            "/storage/:name/index/:path",
+            get(handle_storage_by_index),
         )
         .route("/reader", get(handle_reader))
         .route(
@@ -389,6 +394,39 @@ async fn handle_extension_set_enabled(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("extension_unknown").with_detail(name),
+            )
+        })
+}
+
+async fn handle_storage_index_list(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<StorageIndexSummary>>, ApiErrorResponse> {
+    svc.storage_index_summary(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("storage_unknown").with_detail(name),
+        )
+    })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StorageByIndexQuery {
+    value: String,
+}
+
+async fn handle_storage_by_index(
+    State(svc): State<NamimadoService>,
+    Path((name, path)): Path<(String, String)>,
+    Query(q): Query<StorageByIndexQuery>,
+) -> Result<Json<Vec<StorageEntry>>, ApiErrorResponse> {
+    svc.storage_by_index(&name, &path, &q.value)
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("storage_or_index_unknown")
+                    .with_detail(format!("{name}/{path}")),
             )
         })
 }

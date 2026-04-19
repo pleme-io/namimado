@@ -270,6 +270,13 @@ pub struct StorageEntry {
     pub value: serde_json::Value,
 }
 
+/// GET /storage/:name/index — per-store index inventory + values.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StorageIndexSummary {
+    pub path: String,
+    pub distinct_values: Vec<String>,
+}
+
 /// POST /extensions/verify — verify a signed-extension envelope
 /// against the namimado trust DB. Body: a full SignedExtension JSON
 /// (spec + signature). Returns status + optional signer metadata.
