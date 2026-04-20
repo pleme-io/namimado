@@ -265,6 +265,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/profilers", "Every (defprofiler) profile."),
         mk("GET", "/profilers/:name", "Full ProfilerSpec for one profile."),
         mk("GET", "/console-rules", "Every (defconsole-rule)."),
+        mk("GET", "/reader-aloud", "Every (defreader-aloud) profile."),
+        mk("GET", "/reader-aloud/:name", "Full ReaderAloudSpec for one profile."),
+        mk("GET", "/high-contrast", "Every (defhigh-contrast) profile."),
+        mk("GET", "/high-contrast/resolve", "High-contrast profile for `?host=…`."),
+        mk("GET", "/simplify", "Every (defsimplify) profile."),
+        mk("GET", "/simplify/resolve", "Simplify profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -384,6 +390,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("profiler_list", "Every (defprofiler) profile."),
         mk("profiler_get", "Full ProfilerSpec for one profile."),
         mk("console_rule_list", "Every (defconsole-rule)."),
+        mk("reader_aloud_list", "Every (defreader-aloud) profile."),
+        mk("reader_aloud_get", "Full ReaderAloudSpec for one profile."),
+        mk("high_contrast_list", "Every (defhigh-contrast) profile."),
+        mk("high_contrast_for", "High-contrast profile for a host."),
+        mk("simplify_list", "Every (defsimplify) profile."),
+        mk("simplify_for", "Simplify profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -507,6 +519,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 63, "63 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 66, "66 DSL keywords expected in nami-core");
     }
 }

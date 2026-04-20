@@ -584,6 +584,81 @@ impl NamimadoService {
         }
     }
 
+    // ── Accessibility-plus pack ──────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn reader_aloud_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .reader_aloud_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn reader_aloud_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .reader_aloud_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn high_contrast_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .high_contrast_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn high_contrast_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .high_contrast_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn simplify_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .simplify_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn simplify_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .simplify_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn reader_aloud_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn reader_aloud_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn high_contrast_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn high_contrast_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn simplify_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn simplify_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2568,6 +2643,16 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn a11y_plus_pack_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        assert!(svc.reader_aloud_list().is_empty());
+        assert!(svc.high_contrast_list().is_empty());
+        assert!(svc.simplify_list().is_empty());
+        assert!(svc.high_contrast_for("example.com").is_none());
+        assert!(svc.simplify_for("example.com").is_none());
     }
 
     #[test]

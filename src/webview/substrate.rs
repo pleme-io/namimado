@@ -65,8 +65,11 @@ use nami_core::summarize::{SummarizeRegistry, SummarizeSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
+use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
 use nami_core::inspector::{InspectorRegistry, InspectorSpec};
 use nami_core::profiler::{ProfilerRegistry, ProfilerSpec};
+use nami_core::reader_aloud::{ReaderAloudRegistry, ReaderAloudSpec};
+use nami_core::simplify::{SimplifyRegistry, SimplifySpec};
 use nami_core::media_session::{MediaSessionRegistry, MediaSessionSpec};
 use nami_core::subtitle::{SubtitleRegistry, SubtitleSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
@@ -231,6 +234,9 @@ pub struct SubstratePipeline {
     inspectors: InspectorRegistry,
     profilers: ProfilerRegistry,
     console_rules: ConsoleRuleRegistry,
+    reader_alouds: ReaderAloudRegistry,
+    high_contrasts: HighContrastRegistry,
+    simplifies: SimplifyRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -305,6 +311,9 @@ pub struct SubstratePipeline {
     inspector_names: Vec<String>,
     profiler_names: Vec<String>,
     console_rule_names: Vec<String>,
+    reader_aloud_names: Vec<String>,
+    high_contrast_names: Vec<String>,
+    simplify_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -581,6 +590,28 @@ impl SubstratePipeline {
             bridge_specs.iter().map(|s| s.name.clone()).collect();
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
+
+        // Accessibility-plus pack.
+        let reader_aloud_specs: Vec<ReaderAloudSpec> =
+            nami_core::reader_aloud::compile(&ext_src).unwrap_or_default();
+        let reader_aloud_names: Vec<String> =
+            reader_aloud_specs.iter().map(|s| s.name.clone()).collect();
+        let mut reader_alouds = ReaderAloudRegistry::new();
+        reader_alouds.extend(reader_aloud_specs);
+
+        let high_contrast_specs: Vec<HighContrastSpec> =
+            nami_core::high_contrast::compile(&ext_src).unwrap_or_default();
+        let high_contrast_names: Vec<String> =
+            high_contrast_specs.iter().map(|s| s.name.clone()).collect();
+        let mut high_contrasts = HighContrastRegistry::new();
+        high_contrasts.extend(high_contrast_specs);
+
+        let simplify_specs: Vec<SimplifySpec> =
+            nami_core::simplify::compile(&ext_src).unwrap_or_default();
+        let simplify_names: Vec<String> =
+            simplify_specs.iter().map(|s| s.name.clone()).collect();
+        let mut simplifies = SimplifyRegistry::new();
+        simplifies.extend(simplify_specs);
 
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
@@ -924,7 +955,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -987,6 +1018,9 @@ impl SubstratePipeline {
             inspectors.len(),
             profilers.len(),
             console_rules.len(),
+            reader_alouds.len(),
+            high_contrasts.len(),
+            simplifies.len(),
         );
 
         Self {
@@ -1050,6 +1084,9 @@ impl SubstratePipeline {
             inspectors,
             profilers,
             console_rules,
+            reader_alouds,
+            high_contrasts,
+            simplifies,
             session_store,
             session_spec,
             wasm_agents,
@@ -1119,7 +1156,42 @@ impl SubstratePipeline {
             inspector_names,
             profiler_names,
             console_rule_names,
+            reader_aloud_names,
+            high_contrast_names,
+            simplify_names,
         }
+    }
+
+    // ── Accessibility-plus pack ──────────────────────────────────
+
+    #[must_use]
+    pub fn reader_aloud_list(&self) -> Vec<ReaderAloudSpec> {
+        self.reader_alouds.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn reader_aloud_get(&self, name: &str) -> Option<ReaderAloudSpec> {
+        self.reader_alouds.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn high_contrast_list(&self) -> Vec<HighContrastSpec> {
+        self.high_contrasts.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn high_contrast_for(&self, host: &str) -> Option<HighContrastSpec> {
+        self.high_contrasts.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn simplify_list(&self) -> Vec<SimplifySpec> {
+        self.simplifies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn simplify_for(&self, host: &str) -> Option<SimplifySpec> {
+        self.simplifies.resolve(host).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2096,6 +2168,9 @@ impl SubstratePipeline {
             inspectors: self.inspector_names.clone(),
             profilers: self.profiler_names.clone(),
             console_rules: self.console_rule_names.clone(),
+            reader_alouds: self.reader_aloud_names.clone(),
+            high_contrasts: self.high_contrast_names.clone(),
+            simplifies: self.simplify_names.clone(),
         }
     }
 

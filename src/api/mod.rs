@@ -244,6 +244,9 @@ pub struct RulesInventory {
     pub inspectors: Vec<String>,
     pub profilers: Vec<String>,
     pub console_rules: Vec<String>,
+    pub reader_alouds: Vec<String>,
+    pub high_contrasts: Vec<String>,
+    pub simplifies: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

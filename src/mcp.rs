@@ -798,6 +798,63 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defreader-aloud) profile.")]
+    async fn reader_aloud_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.reader_aloud_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full ReaderAloudSpec for one profile.")]
+    async fn reader_aloud_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.reader_aloud_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "reader_aloud_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "List every (defhigh-contrast) profile.")]
+    async fn high_contrast_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.high_contrast_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved high-contrast profile for a host.")]
+    async fn high_contrast_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.high_contrast_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_high_contrast_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defsimplify) profile.")]
+    async fn simplify_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.simplify_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved simplify profile for a host.")]
+    async fn simplify_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.simplify_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_simplify_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

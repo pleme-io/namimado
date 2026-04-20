@@ -3098,7 +3098,7 @@ dependencies = [
 [[package]]
 name = "nami-core"
 version = "0.1.0"
-source = "git+ssh://git@github.com/pleme-io/nami-core?branch=main#00f39de3299c1039d1fe73cbc0863454060b362b"
+source = "git+ssh://git@github.com/pleme-io/nami-core?branch=main#89f549fd13daedd328feb93b8442ad0336ac43f8"
 dependencies = [
  "base64",
  "blake3",

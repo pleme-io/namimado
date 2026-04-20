@@ -72,6 +72,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/reader-aloud", get(handle_reader_aloud_list))
+        .route("/reader-aloud/:name", get(handle_reader_aloud_get))
+        .route("/high-contrast", get(handle_high_contrast_list))
+        .route("/high-contrast/resolve", get(handle_high_contrast_for))
+        .route("/simplify", get(handle_simplify_list))
+        .route("/simplify/resolve", get(handle_simplify_for))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -507,6 +513,64 @@ async fn handle_storage_by_index(
                 StatusCode::NOT_FOUND,
                 ApiError::new("storage_or_index_unknown")
                     .with_detail(format!("{name}/{path}")),
+            )
+        })
+}
+
+async fn handle_reader_aloud_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.reader_aloud_list())
+}
+
+async fn handle_reader_aloud_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.reader_aloud_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("reader_aloud_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_high_contrast_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.high_contrast_list())
+}
+
+async fn handle_high_contrast_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.high_contrast_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_high_contrast_matches"),
+            )
+        })
+}
+
+async fn handle_simplify_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.simplify_list())
+}
+
+async fn handle_simplify_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.simplify_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_simplify_matches"),
             )
         })
 }
