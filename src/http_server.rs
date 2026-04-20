@@ -225,6 +225,9 @@ pub fn router(service: NamimadoService) -> Router {
             "/tab-macro/by-trigger/:trigger",
             get(handle_tab_macro_by_trigger),
         )
+        .route("/cookie-banner", get(handle_cookie_banner_list))
+        .route("/cookie-banner/resolve", get(handle_cookie_banner_for))
+        .route("/cookie-banner/hide-css", get(handle_cookie_banner_hide_css))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1633,6 +1636,40 @@ async fn handle_tab_macro_by_trigger(
     Path(trigger): Path<String>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.tab_macro_by_trigger(&trigger))
+}
+
+async fn handle_cookie_banner_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.cookie_banner_list())
+}
+
+async fn handle_cookie_banner_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.cookie_banner_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_cookie_banner_matches"),
+            )
+        })
+}
+
+async fn handle_cookie_banner_hide_css(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.cookie_banner_hide_css(&q.host.unwrap_or_default())
+        .map(|css| Json(serde_json::json!({ "css": css })))
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_cookie_banner_hide_css"),
+            )
+        })
 }
 
 async fn handle_inspector_list(

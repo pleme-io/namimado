@@ -1809,6 +1809,41 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn tab_macro_by_trigger(&self, _t: &str) -> Vec<serde_json::Value> { Vec::new() }
 
+    // ── Cookie-banner dismiss ────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn cookie_banner_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cookie_banner_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cookie_banner_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cookie_banner_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cookie_banner_hide_css(&self, host: &str) -> Option<String> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.cookie_banner_hide_css(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cookie_banner_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cookie_banner_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cookie_banner_hide_css(&self, _h: &str) -> Option<String> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3944,6 +3979,15 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn cookie_banner_default_rejects_all_with_hide_css() {
+        let svc = NamimadoService::new();
+        assert!(!svc.cookie_banner_list().is_empty());
+        assert!(svc.cookie_banner_for("example.com").is_some());
+        let css = svc.cookie_banner_hide_css("example.com").unwrap();
+        assert!(css.contains("display: none !important"));
     }
 
     #[test]

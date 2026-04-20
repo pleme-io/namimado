@@ -1819,6 +1819,37 @@ impl NamimadoMcpServer {
         ))
     }
 
+    #[tool(description = "List every (defcookie-banner) profile.")]
+    async fn cookie_banner_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.cookie_banner_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved cookie-banner profile for a host.")]
+    async fn cookie_banner_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.cookie_banner_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_cookie_banner_matches")),
+        }
+    }
+
+    #[tool(description = "CSS rule that hides banner elements on a host ({css: \"...\"}).")]
+    async fn cookie_banner_hide_css(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.cookie_banner_hide_css(&req.host) {
+            Some(css) => Ok(ToolResponse::success(&serde_json::json!({
+                "css": css,
+            }))),
+            None => Ok(ToolResponse::error("no_cookie_banner_hide_css")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

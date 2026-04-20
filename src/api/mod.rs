@@ -280,6 +280,7 @@ pub struct RulesInventory {
     pub time_travels: Vec<String>,
     pub locales: Vec<String>,
     pub tab_macros: Vec<String>,
+    pub cookie_banners: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

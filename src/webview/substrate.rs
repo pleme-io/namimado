@@ -96,6 +96,7 @@ use nami_core::network_throttle::{NetworkThrottleRegistry, NetworkThrottleSpec};
 use nami_core::time_travel::{TimeTravelRegistry, TimeTravelSpec};
 use nami_core::locale::{LocaleRegistry, LocaleSpec};
 use nami_core::tab_macro::{TabMacroRegistry, TabMacroSpec};
+use nami_core::cookie_banner::{CookieBannerRegistry, CookieBannerSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -303,6 +304,7 @@ pub struct SubstratePipeline {
     time_travels: TimeTravelRegistry,
     locales: LocaleRegistry,
     tab_macros: TabMacroRegistry,
+    cookie_banners: CookieBannerRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -413,6 +415,7 @@ pub struct SubstratePipeline {
     time_travel_names: Vec<String>,
     locale_names: Vec<String>,
     tab_macro_names: Vec<String>,
+    cookie_banner_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1188,6 +1191,21 @@ impl SubstratePipeline {
         let mut tab_macros = TabMacroRegistry::new();
         tab_macros.extend(tab_macro_specs);
 
+        // Cookie banner auto-dismiss.
+        let cookie_banner_specs: Vec<CookieBannerSpec> =
+            nami_core::cookie_banner::compile(&ext_src).unwrap_or_default();
+        let cookie_banner_names: Vec<String> = if cookie_banner_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            cookie_banner_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut cookie_banners = CookieBannerRegistry::new();
+        if cookie_banner_specs.is_empty() {
+            cookie_banners.insert(CookieBannerSpec::default_profile());
+        } else {
+            cookie_banners.extend(cookie_banner_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1530,7 +1548,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1629,6 +1647,7 @@ impl SubstratePipeline {
             time_travels.len(),
             locales.len(),
             tab_macros.len(),
+            cookie_banners.len(),
         );
 
         Self {
@@ -1728,6 +1747,7 @@ impl SubstratePipeline {
             time_travels,
             locales,
             tab_macros,
+            cookie_banners,
             session_store,
             session_spec,
             wasm_agents,
@@ -1833,6 +1853,7 @@ impl SubstratePipeline {
             time_travel_names,
             locale_names,
             tab_macro_names,
+            cookie_banner_names,
         }
     }
 
@@ -2410,6 +2431,27 @@ impl SubstratePipeline {
             .into_iter()
             .cloned()
             .collect()
+    }
+
+    // ── Cookie-banner dismiss ────────────────────────────────────
+
+    #[must_use]
+    pub fn cookie_banner_list(&self) -> Vec<CookieBannerSpec> {
+        self.cookie_banners.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn cookie_banner_for(&self, host: &str) -> Option<CookieBannerSpec> {
+        self.cookie_banners.resolve(host).cloned()
+    }
+
+    /// CSS string that hides banner elements on `host` (None when
+    /// preference is Passthrough or selectors are empty).
+    #[must_use]
+    pub fn cookie_banner_hide_css(&self, host: &str) -> Option<String> {
+        self.cookie_banners
+            .resolve(host)
+            .and_then(CookieBannerSpec::render_hide_css)
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3451,6 +3493,7 @@ impl SubstratePipeline {
             time_travels: self.time_travel_names.clone(),
             locales: self.locale_names.clone(),
             tab_macros: self.tab_macro_names.clone(),
+            cookie_banners: self.cookie_banner_names.clone(),
         }
     }
 

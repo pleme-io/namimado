@@ -358,6 +358,9 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/tab-macro", "Every (deftab-macro)."),
         mk("GET", "/tab-macro/:name", "Full TabMacroSpec by name."),
         mk("GET", "/tab-macro/by-trigger/:trigger", "Tab-macros bound to a trigger."),
+        mk("GET", "/cookie-banner", "Every (defcookie-banner) profile."),
+        mk("GET", "/cookie-banner/resolve", "Cookie-banner profile for `?host=…`."),
+        mk("GET", "/cookie-banner/hide-css", "Hide-CSS for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -570,6 +573,9 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("tab_macro_list", "Every (deftab-macro)."),
         mk("tab_macro_get", "Full TabMacroSpec by name."),
         mk("tab_macro_by_trigger", "Tab-macros bound to a trigger."),
+        mk("cookie_banner_list", "Every (defcookie-banner) profile."),
+        mk("cookie_banner_for", "Cookie-banner profile for a host."),
+        mk("cookie_banner_hide_css", "Hide-CSS rule for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -693,6 +699,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 99, "99 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 100, "100 DSL keywords expected in nami-core");
     }
 }
