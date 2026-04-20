@@ -241,6 +241,14 @@ struct EventKindRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct ReferrerHeaderRequest {
+    /// Source URL (full: `scheme://host/path?query`).
+    from: String,
+    /// Destination URL.
+    to: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct AutoplayAdmitsRequest {
     host: String,
     #[serde(default)]
@@ -1977,6 +1985,34 @@ impl NamimadoMcpServer {
     ) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(&serde_json::json!({
             "should_chain": self.service.tab_attestation_should_chain(&req.host),
+        })))
+    }
+
+    #[tool(description = "List every (defreferrer) profile.")]
+    async fn referrer_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.referrer_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved referrer profile for a destination host.")]
+    async fn referrer_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.referrer_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_referrer_matches")),
+        }
+    }
+
+    #[tool(description = "Compute the Referer header for a (from → to) navigation. Returns {referer: string|null}.")]
+    async fn referrer_header(
+        &self,
+        Parameters(req): Parameters<ReferrerHeaderRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(&serde_json::json!({
+            "referer": self.service.referrer_header_for(&req.from, &req.to),
         })))
     }
 

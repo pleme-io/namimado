@@ -372,6 +372,9 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/tab-attestation", "Every (deftab-attestation) profile."),
         mk("GET", "/tab-attestation/resolve", "Tab-attestation profile for `?host=…`."),
         mk("GET", "/tab-attestation/should-chain", "Whether a tab opened on `?host=…` should be chained (enabled + matches + not exempt)."),
+        mk("GET", "/referrer", "Every (defreferrer) profile."),
+        mk("GET", "/referrer/resolve", "Referrer profile for `?host=…`."),
+        mk("GET", "/referrer/header", "Compute the Referer header for `?from=…&to=…` — returns {referer: string|null}."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -598,6 +601,9 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("tab_attestation_list", "Every (deftab-attestation) profile."),
         mk("tab_attestation_for", "Tab-attestation profile for a host."),
         mk("tab_attestation_should_chain", "Whether a tab opened on a host should be chained."),
+        mk("referrer_list", "Every (defreferrer) profile."),
+        mk("referrer_for", "Referrer profile for a destination host."),
+        mk("referrer_header", "Compute the Referer header for a (from → to) navigation."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -721,6 +727,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 104, "104 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 105, "105 DSL keywords expected in nami-core");
     }
 }

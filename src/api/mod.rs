@@ -285,6 +285,7 @@ pub struct RulesInventory {
     pub text_spacings: Vec<String>,
     pub autoplays: Vec<String>,
     pub tab_attestations: Vec<String>,
+    pub referrers: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

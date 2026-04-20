@@ -101,6 +101,7 @@ use nami_core::smart_bookmark::{SmartBookmarkRegistry, SmartBookmarkSpec};
 use nami_core::text_spacing::{TextSpacingRegistry, TextSpacingSpec};
 use nami_core::autoplay::{AutoplayRegistry, AutoplaySpec};
 use nami_core::tab_attestation::{TabAttestationRegistry, TabAttestationSpec};
+use nami_core::referrer::{ReferrerRegistry, ReferrerSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -313,6 +314,7 @@ pub struct SubstratePipeline {
     text_spacings: TextSpacingRegistry,
     autoplays: AutoplayRegistry,
     tab_attestations: TabAttestationRegistry,
+    referrers: ReferrerRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -428,6 +430,7 @@ pub struct SubstratePipeline {
     text_spacing_names: Vec<String>,
     autoplay_names: Vec<String>,
     tab_attestation_names: Vec<String>,
+    referrer_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1278,6 +1281,21 @@ impl SubstratePipeline {
             tab_attestations.extend(tab_attestation_specs);
         }
 
+        // Referrer — per-host Referer header policy.
+        let referrer_specs: Vec<ReferrerSpec> =
+            nami_core::referrer::compile(&ext_src).unwrap_or_default();
+        let referrer_names: Vec<String> = if referrer_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            referrer_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut referrers = ReferrerRegistry::new();
+        if referrer_specs.is_empty() {
+            referrers.insert(ReferrerSpec::default_profile());
+        } else {
+            referrers.extend(referrer_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1620,7 +1638,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay · {} tab-attestation",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay · {} tab-attestation · {} referrer",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1724,6 +1742,7 @@ impl SubstratePipeline {
             text_spacings.len(),
             autoplays.len(),
             tab_attestations.len(),
+            referrers.len(),
         );
 
         Self {
@@ -1828,6 +1847,7 @@ impl SubstratePipeline {
             text_spacings,
             autoplays,
             tab_attestations,
+            referrers,
             session_store,
             session_spec,
             wasm_agents,
@@ -1938,6 +1958,7 @@ impl SubstratePipeline {
             text_spacing_names,
             autoplay_names,
             tab_attestation_names,
+            referrer_names,
         }
     }
 
@@ -2613,6 +2634,30 @@ impl SubstratePipeline {
             .resolve(host)
             .map(|s| s.should_chain(host))
             .unwrap_or(false)
+    }
+
+    // ── Referrer (per-host Referer header policy) ─────────────────
+
+    #[must_use]
+    pub fn referrer_list(&self) -> Vec<ReferrerSpec> {
+        self.referrers.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn referrer_for(&self, host: &str) -> Option<ReferrerSpec> {
+        self.referrers.resolve(host).cloned()
+    }
+
+    /// Compute the Referer header for a `(from → to)` navigation.
+    /// Returns `None` when no header should be sent.
+    #[must_use]
+    pub fn referrer_header_for(
+        &self,
+        from: &nami_core::referrer::UrlParts,
+        to: &nami_core::referrer::UrlParts,
+    ) -> Option<String> {
+        let spec = self.referrers.resolve(to.host)?;
+        spec.header_for(from, to)
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3659,6 +3704,7 @@ impl SubstratePipeline {
             text_spacings: self.text_spacing_names.clone(),
             autoplays: self.autoplay_names.clone(),
             tab_attestations: self.tab_attestation_names.clone(),
+            referrers: self.referrer_names.clone(),
         }
     }
 

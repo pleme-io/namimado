@@ -239,6 +239,9 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/tab-attestation", get(handle_tab_attestation_list))
         .route("/tab-attestation/resolve", get(handle_tab_attestation_for))
         .route("/tab-attestation/should-chain", get(handle_tab_attestation_should_chain))
+        .route("/referrer", get(handle_referrer_list))
+        .route("/referrer/resolve", get(handle_referrer_for))
+        .route("/referrer/header", get(handle_referrer_header))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1820,6 +1823,43 @@ async fn handle_tab_attestation_should_chain(
     let host = q.host.unwrap_or_default();
     Json(serde_json::json!({
         "should_chain": svc.tab_attestation_should_chain(&host),
+    }))
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct ReferrerHeaderQuery {
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+async fn handle_referrer_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.referrer_list())
+}
+
+async fn handle_referrer_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.referrer_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_referrer_matches"),
+            )
+        })
+}
+
+async fn handle_referrer_header(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<ReferrerHeaderQuery>,
+) -> Json<serde_json::Value> {
+    let from = q.from.unwrap_or_default();
+    let to = q.to.unwrap_or_default();
+    Json(serde_json::json!({
+        "referer": svc.referrer_header_for(&from, &to),
     }))
 }
 

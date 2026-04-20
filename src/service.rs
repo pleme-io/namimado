@@ -2001,6 +2001,46 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn tab_attestation_should_chain(&self, _h: &str) -> bool { false }
 
+    // ── Referrer (per-host Referer header policy) ────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn referrer_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .referrer_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn referrer_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .referrer_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// Compute the Referer header for a `(from → to)` navigation.
+    /// Returns `None` when no header should be sent (policy blocks it
+    /// OR no profile matches the destination).
+    #[cfg(feature = "browser-core")]
+    pub fn referrer_header_for(&self, from_url: &str, to_url: &str) -> Option<String> {
+        let from = parse_url_parts(from_url)?;
+        let to = parse_url_parts(to_url)?;
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.referrer_header_for(&from.as_parts(), &to.as_parts())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn referrer_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn referrer_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn referrer_header_for(&self, _f: &str, _t: &str) -> Option<String> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3613,6 +3653,56 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+pub(crate) struct ParsedUrl {
+    scheme: String,
+    host: String,
+    port: Option<u16>,
+    path: String,
+    query: Option<String>,
+}
+
+#[cfg(feature = "browser-core")]
+impl ParsedUrl {
+    pub(crate) fn as_parts(&self) -> nami_core::referrer::UrlParts<'_> {
+        nami_core::referrer::UrlParts {
+            scheme: &self.scheme,
+            host: &self.host,
+            port: self.port,
+            path: &self.path,
+            query: self.query.as_deref(),
+        }
+    }
+}
+
+/// Minimal URL parser for `scheme://host[:port]/path?query`. Returns
+/// `None` on malformed input. Intentionally does not own a URL-crate
+/// dependency — the shape is enough for Referer policy decisions.
+#[cfg(feature = "browser-core")]
+pub(crate) fn parse_url_parts(url: &str) -> Option<ParsedUrl> {
+    let (scheme, rest) = url.split_once("://")?;
+    let (authority, pathq) = rest.split_once('/').unwrap_or((rest, ""));
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((h, p)) if !h.is_empty() => (h.to_owned(), p.parse::<u16>().ok()),
+        _ => (authority.to_owned(), None),
+    };
+    let pathq = if pathq.is_empty() { "/".to_owned() } else { format!("/{pathq}") };
+    let (path, query) = match pathq.split_once('?') {
+        Some((p, q)) => (p.to_owned(), Some(q.to_owned())),
+        None => (pathq, None),
+    };
+    if scheme.is_empty() || host.is_empty() {
+        return None;
+    }
+    Some(ParsedUrl {
+        scheme: scheme.to_owned(),
+        host,
+        port,
+        path,
+        query,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_track_kind(s: &str) -> Option<nami_core::autoplay::TrackKind> {
     use nami_core::autoplay::TrackKind::*;
     Some(match s {
@@ -4157,6 +4247,28 @@ mod tests {
         let css = svc.text_spacing_css("example.com").unwrap();
         assert!(css.contains("line-height: 1.5"));
         assert!(css.contains("!important"));
+    }
+
+    #[test]
+    fn referrer_default_strips_on_https_downgrade_and_cross_origin() {
+        let svc = NamimadoService::new();
+        assert!(!svc.referrer_list().is_empty());
+        assert!(svc.referrer_for("example.com").is_some());
+        // Same-origin HTTPS → full URL.
+        assert_eq!(
+            svc.referrer_header_for("https://a.com/x?k=v", "https://a.com/y"),
+            Some("https://a.com/x?k=v".into())
+        );
+        // Cross-origin HTTPS → origin only.
+        assert_eq!(
+            svc.referrer_header_for("https://a.com/x?k=v", "https://b.com/"),
+            Some("https://a.com".into())
+        );
+        // HTTPS → HTTP downgrade → no header.
+        assert_eq!(
+            svc.referrer_header_for("https://a.com/x", "http://b.com/"),
+            None
+        );
     }
 
     #[test]
