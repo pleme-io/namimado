@@ -342,6 +342,10 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/viewport", "Every (defviewport) profile."),
         mk("GET", "/viewport/resolve", "Viewport profile for `?host=…`."),
         mk("GET", "/viewport/meta", "Synthesized `<meta name=viewport>` for `?host=…`."),
+        mk("GET", "/csp-policy", "Every (defcsp-policy) profile."),
+        mk("GET", "/csp-policy/resolve", "CSP policy for `?host=…`."),
+        mk("GET", "/csp-policy/header", "Rendered {header_name, header_value} for `?host=…`."),
+        mk("GET", "/csp-policy/validate", "Validation warnings for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -538,6 +542,10 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("viewport_list", "Every (defviewport) profile."),
         mk("viewport_for", "Viewport profile for a host."),
         mk("viewport_meta", "Synthesized `<meta name=viewport>` for a host."),
+        mk("csp_policy_list", "Every (defcsp-policy) profile."),
+        mk("csp_policy_for", "CSP policy for a host."),
+        mk("csp_header", "Rendered CSP {header_name, header_value} for a host."),
+        mk("csp_validate", "Validation warnings for a host's CSP."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -661,6 +669,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 94, "94 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 95, "95 DSL keywords expected in nami-core");
     }
 }

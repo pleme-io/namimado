@@ -91,6 +91,7 @@ use nami_core::storage_quota::{StorageQuotaRegistry, StorageQuotaSpec};
 use nami_core::clear_site_data::{ClearSiteDataRegistry, ClearSiteDataSpec};
 use nami_core::audit_trail::{AuditTrailRegistry, AuditTrailSpec};
 use nami_core::viewport::{ViewportRegistry, ViewportSpec};
+use nami_core::csp_policy::{CspPolicyRegistry, CspPolicySpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -293,6 +294,7 @@ pub struct SubstratePipeline {
     clear_site_datas: ClearSiteDataRegistry,
     audit_trails: AuditTrailRegistry,
     viewports: ViewportRegistry,
+    csp_policies: CspPolicyRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -398,6 +400,7 @@ pub struct SubstratePipeline {
     clear_site_data_names: Vec<String>,
     audit_trail_names: Vec<String>,
     viewport_names: Vec<String>,
+    csp_policy_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1107,6 +1110,21 @@ impl SubstratePipeline {
             viewports.extend(viewport_specs);
         }
 
+        // CSP policy — typed Content-Security-Policy builder.
+        let csp_policy_specs: Vec<CspPolicySpec> =
+            nami_core::csp_policy::compile(&ext_src).unwrap_or_default();
+        let csp_policy_names: Vec<String> = if csp_policy_specs.is_empty() {
+            vec!["strict".to_owned()]
+        } else {
+            csp_policy_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut csp_policies = CspPolicyRegistry::new();
+        if csp_policy_specs.is_empty() {
+            csp_policies.insert(CspPolicySpec::default_profile());
+        } else {
+            csp_policies.extend(csp_policy_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1449,7 +1467,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1543,6 +1561,7 @@ impl SubstratePipeline {
             clear_site_datas.len(),
             audit_trails.len(),
             viewports.len(),
+            csp_policies.len(),
         );
 
         Self {
@@ -1637,6 +1656,7 @@ impl SubstratePipeline {
             clear_site_datas,
             audit_trails,
             viewports,
+            csp_policies,
             session_store,
             session_spec,
             wasm_agents,
@@ -1737,6 +1757,7 @@ impl SubstratePipeline {
             clear_site_data_names,
             audit_trail_names,
             viewport_names,
+            csp_policy_names,
         }
     }
 
@@ -2217,6 +2238,34 @@ impl SubstratePipeline {
     #[must_use]
     pub fn viewport_meta_for(&self, host: &str) -> Option<String> {
         self.viewports.resolve(host).map(|s| s.render_meta())
+    }
+
+    // ── CSP policy (novel) ───────────────────────────────────────
+
+    #[must_use]
+    pub fn csp_policy_list(&self) -> Vec<CspPolicySpec> {
+        self.csp_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn csp_policy_for(&self, host: &str) -> Option<CspPolicySpec> {
+        self.csp_policies.resolve(host).cloned()
+    }
+
+    /// Rendered (header_name, header_value) tuple for `host`.
+    #[must_use]
+    pub fn csp_header_for(&self, host: &str) -> Option<(String, String)> {
+        self.csp_policies
+            .resolve(host)
+            .map(|s| (s.header_name().to_owned(), s.render()))
+    }
+
+    /// Return the validation warnings for `host`'s CSP.
+    #[must_use]
+    pub fn csp_validate_for(&self, host: &str) -> Option<Vec<String>> {
+        self.csp_policies
+            .resolve(host)
+            .map(|s| s.validate().into_iter().map(|e| e.to_string()).collect())
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -3224,6 +3273,7 @@ impl SubstratePipeline {
             clear_site_datas: self.clear_site_data_names.clone(),
             audit_trails: self.audit_trail_names.clone(),
             viewports: self.viewport_names.clone(),
+            csp_policies: self.csp_policy_names.clone(),
         }
     }
 

@@ -1605,6 +1605,56 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn viewport_meta_for(&self, _h: &str) -> Option<String> { None }
 
+    // ── CSP policy (novel) ───────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn csp_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .csp_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn csp_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .csp_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// {header_name, header_value} for the CSP applicable to `host`.
+    #[cfg(feature = "browser-core")]
+    pub fn csp_header_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.csp_header_for(host).map(|(name, value)| {
+            serde_json::json!({
+                "header_name": name,
+                "header_value": value,
+            })
+        })
+    }
+
+    /// Validation warnings for `host`'s CSP.
+    #[cfg(feature = "browser-core")]
+    pub fn csp_validate_for(&self, host: &str) -> Option<Vec<String>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.csp_validate_for(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn csp_policy_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn csp_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn csp_header_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn csp_validate_for(&self, _h: &str) -> Option<Vec<String>> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3727,6 +3777,20 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn csp_policy_default_is_strict_self_only_and_validates_clean() {
+        let svc = NamimadoService::new();
+        assert!(!svc.csp_policy_list().is_empty());
+        let header = svc.csp_header_for("example.com").unwrap();
+        assert_eq!(header["header_name"], "Content-Security-Policy");
+        let v = header["header_value"].as_str().unwrap();
+        assert!(v.contains("default-src 'self'"));
+        assert!(v.contains("object-src 'none'"));
+        // Default profile should validate clean.
+        let warnings = svc.csp_validate_for("example.com").unwrap();
+        assert!(warnings.is_empty(), "warnings: {warnings:?}");
     }
 
     #[test]

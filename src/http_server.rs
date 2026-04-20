@@ -197,6 +197,10 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/viewport", get(handle_viewport_list))
         .route("/viewport/resolve", get(handle_viewport_for))
         .route("/viewport/meta", get(handle_viewport_meta))
+        .route("/csp-policy", get(handle_csp_policy_list))
+        .route("/csp-policy/resolve", get(handle_csp_policy_for))
+        .route("/csp-policy/header", get(handle_csp_header))
+        .route("/csp-policy/validate", get(handle_csp_validate))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1437,6 +1441,54 @@ async fn handle_viewport_meta(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_viewport_matches"),
+            )
+        })
+}
+
+async fn handle_csp_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.csp_policy_list())
+}
+
+async fn handle_csp_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.csp_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_csp_policy_matches"),
+            )
+        })
+}
+
+async fn handle_csp_header(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.csp_header_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_csp_policy_matches"),
+            )
+        })
+}
+
+async fn handle_csp_validate(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.csp_validate_for(&q.host.unwrap_or_default())
+        .map(|w| Json(serde_json::json!({ "warnings": w })))
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_csp_policy_matches"),
             )
         })
 }

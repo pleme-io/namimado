@@ -1648,6 +1648,48 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defcsp-policy) profile.")]
+    async fn csp_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.csp_policy_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved CSP policy for a host.")]
+    async fn csp_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.csp_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_csp_policy_matches")),
+        }
+    }
+
+    #[tool(description = "Rendered CSP {header_name, header_value} for a host.")]
+    async fn csp_header(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.csp_header_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_csp_policy_matches")),
+        }
+    }
+
+    #[tool(description = "Validation warnings for a host's CSP (mutual-exclusion foot-guns).")]
+    async fn csp_validate(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.csp_validate_for(&req.host) {
+            Some(warnings) => Ok(ToolResponse::success(&serde_json::json!({
+                "warnings": warnings,
+            }))),
+            None => Ok(ToolResponse::error("no_csp_policy_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
