@@ -1,6 +1,17 @@
 {
+  "git+https://github.com/pleme-io/awase#0.1.0": "00arfp0lvp25j26yamr9vw5scq0axklzcxrq3c5wfl0v9v655swq",
   "git+https://github.com/pleme-io/egaku#0.1.0": "01jrzk2w2dil6nbqg7d5lcdrsbqg45ixnki5q5flcvhvb09zmdbg",
   "git+https://github.com/pleme-io/garasu#0.1.0": "0p9qy6l4q0yig92y4gvgd0wwh7kk01w5vci64i4fhlihab98j92c",
   "git+https://github.com/pleme-io/irodzuki#0.1.0": "0rn2jasj0ib6yagyjnyqkirdan6084wi2m6zji5ydasb92rc9353",
-  "git+https://github.com/pleme-io/shikumi#0.1.0": "0ad63lf5jp2n8kd3dqgkc6plndbckaxrgmhqdmpkdh9n51kjjjxh"
+  "git+https://github.com/pleme-io/kaname#0.1.0": "1kp9rh5pyn49pjcn9nf7x1vkm18vadr38hxx265hf077ljayr7ll",
+  "git+https://github.com/pleme-io/shikumi#0.1.0": "0ad63lf5jp2n8kd3dqgkc6plndbckaxrgmhqdmpkdh9n51kjjjxh",
+  "git+https://github.com/pleme-io/soushi#0.1.0": "0m3cq0h2pm03p1z1pz7xgwrshzb3svbkx37ak8wnkrx4w4sb0xfv",
+  "git+ssh://git@github.com/pleme-io/nami-core?branch=main#0.1.0": "17l09x92i45k6idmarq9r6c2hkaah8p8qh05wyvfzvr1y1ig8qc0",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-core@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-eval@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-lattice@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-lisp-derive@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-lisp@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-nix@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4",
+  "git+ssh://git@github.com/pleme-io/tatara?rev=a1062f8069bb336a87cb9b2c68a85885665e3234#tatara-process@0.2.0": "0rad43lqlqa3sadrfwf0y7vs72a1b4c1zz0pi670cmmq6s1g9fz4"
 }
