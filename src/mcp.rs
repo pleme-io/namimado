@@ -1543,6 +1543,42 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defstorage-quota) profile.")]
+    async fn storage_quota_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.storage_quota_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved storage-quota for a host.")]
+    async fn storage_quota_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.storage_quota_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_storage_quota_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defclear-site-data) profile.")]
+    async fn clear_site_data_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.clear_site_data_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Clear-site-data profiles applicable to a host (not exempt).")]
+    async fn clear_site_data_applicable(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.clear_site_data_applicable(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

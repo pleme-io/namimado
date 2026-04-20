@@ -87,6 +87,8 @@ use nami_core::bfcache_policy::{BfcachePolicyRegistry, BfcachePolicySpec};
 use nami_core::prerender_rule::{PrerenderRuleRegistry, PrerenderRuleSpec};
 use nami_core::history_policy::{HistoryPolicyRegistry, HistoryPolicySpec};
 use nami_core::navigation_intent::{NavigationIntentRegistry, NavigationIntentSpec};
+use nami_core::storage_quota::{StorageQuotaRegistry, StorageQuotaSpec};
+use nami_core::clear_site_data::{ClearSiteDataRegistry, ClearSiteDataSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -285,6 +287,8 @@ pub struct SubstratePipeline {
     prerender_rules: PrerenderRuleRegistry,
     history_policies: HistoryPolicyRegistry,
     navigation_intents: NavigationIntentRegistry,
+    storage_quotas: StorageQuotaRegistry,
+    clear_site_datas: ClearSiteDataRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -386,6 +390,8 @@ pub struct SubstratePipeline {
     prerender_rule_names: Vec<String>,
     history_policy_names: Vec<String>,
     navigation_intent_names: Vec<String>,
+    storage_quota_names: Vec<String>,
+    clear_site_data_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1039,6 +1045,38 @@ impl SubstratePipeline {
             navigation_intents.extend(navigation_intent_specs);
         }
 
+        // Storage pack — per-origin quota + Clear-Site-Data.
+        let storage_quota_specs: Vec<StorageQuotaSpec> =
+            nami_core::storage_quota::compile(&ext_src).unwrap_or_default();
+        let storage_quota_names: Vec<String> = if storage_quota_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            storage_quota_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut storage_quotas = StorageQuotaRegistry::new();
+        if storage_quota_specs.is_empty() {
+            storage_quotas.insert(StorageQuotaSpec::default_profile());
+        } else {
+            storage_quotas.extend(storage_quota_specs);
+        }
+
+        let clear_site_data_specs: Vec<ClearSiteDataSpec> =
+            nami_core::clear_site_data::compile(&ext_src).unwrap_or_default();
+        let clear_site_data_names: Vec<String> = if clear_site_data_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            clear_site_data_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut clear_site_datas = ClearSiteDataRegistry::new();
+        if clear_site_data_specs.is_empty() {
+            clear_site_datas.insert(ClearSiteDataSpec::default_profile());
+        } else {
+            clear_site_datas.extend(clear_site_data_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1381,7 +1419,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1471,6 +1509,8 @@ impl SubstratePipeline {
             prerender_rules.len(),
             history_policies.len(),
             navigation_intents.len(),
+            storage_quotas.len(),
+            clear_site_datas.len(),
         );
 
         Self {
@@ -1561,6 +1601,8 @@ impl SubstratePipeline {
             prerender_rules,
             history_policies,
             navigation_intents,
+            storage_quotas,
+            clear_site_datas,
             session_store,
             session_spec,
             wasm_agents,
@@ -1657,6 +1699,8 @@ impl SubstratePipeline {
             prerender_rule_names,
             history_policy_names,
             navigation_intent_names,
+            storage_quota_names,
+            clear_site_data_names,
         }
     }
 
@@ -2069,6 +2113,32 @@ impl SubstratePipeline {
         self.navigation_intents
             .resolve(host)
             .map(|s| s.resolve(source, same_origin, had_user_gesture))
+    }
+
+    // ── Storage pack ─────────────────────────────────────────────
+
+    #[must_use]
+    pub fn storage_quota_list(&self) -> Vec<StorageQuotaSpec> {
+        self.storage_quotas.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn storage_quota_for(&self, host: &str) -> Option<StorageQuotaSpec> {
+        self.storage_quotas.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn clear_site_data_list(&self) -> Vec<ClearSiteDataSpec> {
+        self.clear_site_datas.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn clear_site_data_applicable(&self, host: &str) -> Vec<ClearSiteDataSpec> {
+        self.clear_site_datas
+            .applicable_to(host)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -3072,6 +3142,8 @@ impl SubstratePipeline {
             prerender_rules: self.prerender_rule_names.clone(),
             history_policies: self.history_policy_names.clone(),
             navigation_intents: self.navigation_intent_names.clone(),
+            storage_quotas: self.storage_quota_names.clone(),
+            clear_site_datas: self.clear_site_data_names.clone(),
         }
     }
 

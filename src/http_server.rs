@@ -181,6 +181,13 @@ pub fn router(service: NamimadoService) -> Router {
             "/navigation-intent/decide",
             get(handle_navigation_decide),
         )
+        .route("/storage-quota", get(handle_storage_quota_list))
+        .route("/storage-quota/resolve", get(handle_storage_quota_for))
+        .route("/clear-site-data", get(handle_clear_site_data_list))
+        .route(
+            "/clear-site-data/applicable",
+            get(handle_clear_site_data_applicable),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1331,6 +1338,39 @@ async fn handle_navigation_decide(
             ApiError::new("click_source_unknown").with_detail(q.click_source),
         )
     })
+}
+
+async fn handle_storage_quota_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.storage_quota_list())
+}
+
+async fn handle_storage_quota_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.storage_quota_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_storage_quota_matches"),
+            )
+        })
+}
+
+async fn handle_clear_site_data_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.clear_site_data_list())
+}
+
+async fn handle_clear_site_data_applicable(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.clear_site_data_applicable(&q.host.unwrap_or_default()))
 }
 
 async fn handle_inspector_list(

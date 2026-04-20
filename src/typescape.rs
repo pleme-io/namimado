@@ -332,6 +332,10 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/navigation-intent", "Every (defnavigation-intent) profile."),
         mk("GET", "/navigation-intent/resolve", "Navigation-intent for `?host=…`."),
         mk("GET", "/navigation-intent/decide", "OpenDisposition for (host, click_source, same_origin, had_user_gesture)."),
+        mk("GET", "/storage-quota", "Every (defstorage-quota) profile."),
+        mk("GET", "/storage-quota/resolve", "Storage quota for `?host=…`."),
+        mk("GET", "/clear-site-data", "Every (defclear-site-data) profile."),
+        mk("GET", "/clear-site-data/applicable", "Clear-site-data profiles applicable to `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -518,6 +522,10 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("navigation_intent_list", "Every (defnavigation-intent) profile."),
         mk("navigation_intent_for", "Navigation-intent for a host."),
         mk("navigation_decide", "OpenDisposition for (host, click_source, same_origin, had_user_gesture)."),
+        mk("storage_quota_list", "Every (defstorage-quota) profile."),
+        mk("storage_quota_for", "Storage quota for a host."),
+        mk("clear_site_data_list", "Every (defclear-site-data) profile."),
+        mk("clear_site_data_applicable", "Clear-site-data profiles applicable to a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -641,6 +649,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 90, "90 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 92, "92 DSL keywords expected in nami-core");
     }
 }

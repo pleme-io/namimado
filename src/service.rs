@@ -1474,6 +1474,59 @@ impl NamimadoService {
         None
     }
 
+    // ── Storage pack ─────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn storage_quota_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .storage_quota_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn storage_quota_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .storage_quota_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn clear_site_data_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .clear_site_data_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn clear_site_data_applicable(&self, host: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .clear_site_data_applicable(host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_quota_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn storage_quota_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn clear_site_data_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn clear_site_data_applicable(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3571,6 +3624,16 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn storage_pack_defaults_wire_through() {
+        let svc = NamimadoService::new();
+        assert!(!svc.storage_quota_list().is_empty());
+        assert!(!svc.clear_site_data_list().is_empty());
+        assert!(svc.storage_quota_for("example.com").is_some());
+        // Default applies to all hosts.
+        assert!(!svc.clear_site_data_applicable("example.com").is_empty());
     }
 
     #[test]
