@@ -27,7 +27,7 @@ use crate::api::{
     JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
     OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
     RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
-    ChatAskRequest, LlmCompletionRequest, LlmMessageDto, LlmResponseDto, OutlineRequest,
+    ChatAskRequest, LlmCompletionRequest, LlmResponseDto, OutlineRequest,
     RedirectRequest, RoutingResolveResponse, SpaceActivateResponse, SummarizeRequest,
     UrlCleanRequest, UrlRewriteResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
     StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
