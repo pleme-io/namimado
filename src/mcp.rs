@@ -229,6 +229,12 @@ struct PermissionDecideRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct EventKindRequest {
+    /// Kebab-case event kind (rc-reload, permission-grant, totp-read, …).
+    event: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct HistoryRecordRequest {
     host: String,
     url: String,
@@ -1575,6 +1581,38 @@ impl NamimadoMcpServer {
     ) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
             &serde_json::to_value(&self.service.clear_site_data_applicable(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defaudit-trail) profile. Privacy-first: empty until the user opts in via rc file.")]
+    async fn audit_trail_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.audit_trail_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full AuditTrailSpec for one profile by name.")]
+    async fn audit_trail_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.audit_trail_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "audit_trail_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Audit-trail profiles that capture a given event (kebab-case event name).")]
+    async fn audit_trail_for_event(
+        &self,
+        Parameters(req): Parameters<EventKindRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.audit_trail_for_event(&req.event))
                 .unwrap_or_default(),
         ))
     }

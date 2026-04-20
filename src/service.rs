@@ -1527,6 +1527,49 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn clear_site_data_applicable(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
 
+    // ── Audit trail (novel) ──────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn audit_trail_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .audit_trail_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn audit_trail_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .audit_trail_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn audit_trail_for_event(&self, event: &str) -> Vec<serde_json::Value> {
+        let Some(k) = parse_event_kind(event) else {
+            return Vec::new();
+        };
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .audit_trail_profiles_for(k)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn audit_trail_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn audit_trail_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn audit_trail_for_event(&self, _e: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3139,6 +3182,31 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+fn parse_event_kind(s: &str) -> Option<nami_core::audit_trail::EventKind> {
+    use nami_core::audit_trail::EventKind::*;
+    Some(match s {
+        "rc-reload" => RcReload,
+        "extension-install" => ExtensionInstall,
+        "extension-uninstall" => ExtensionUninstall,
+        "extension-toggle" => ExtensionToggle,
+        "permission-grant" => PermissionGrant,
+        "permission-deny" => PermissionDeny,
+        "identity-switch" => IdentitySwitch,
+        "sync-change" => SyncChange,
+        "storage-clear" => StorageClear,
+        "routing-change" => RoutingChange,
+        "navigation" => Navigation,
+        "totp-read" => TotpRead,
+        "dsl-failure" => DslFailure,
+        "permission-blocked" => PermissionBlocked,
+        "capability-request" => CapabilityRequest,
+        "audit-clear" => AuditClear,
+        "custom" => Custom,
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_click_source(s: &str) -> Option<nami_core::navigation_intent::ClickSource> {
     use nami_core::navigation_intent::ClickSource::*;
     Some(match s {
@@ -3624,6 +3692,16 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn audit_trail_defaults_off_and_only_user_specs_count() {
+        let svc = NamimadoService::new();
+        // Novel — audit_trail auto-registers NOTHING. Privacy-first:
+        // the user must opt in via rc file, otherwise the list is empty.
+        assert!(svc.audit_trail_list().is_empty());
+        // Unknown event → empty, not None (list-shaped surface).
+        assert!(svc.audit_trail_for_event("bogus").is_empty());
     }
 
     #[test]

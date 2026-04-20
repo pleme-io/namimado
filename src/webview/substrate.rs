@@ -89,6 +89,7 @@ use nami_core::history_policy::{HistoryPolicyRegistry, HistoryPolicySpec};
 use nami_core::navigation_intent::{NavigationIntentRegistry, NavigationIntentSpec};
 use nami_core::storage_quota::{StorageQuotaRegistry, StorageQuotaSpec};
 use nami_core::clear_site_data::{ClearSiteDataRegistry, ClearSiteDataSpec};
+use nami_core::audit_trail::{AuditTrailRegistry, AuditTrailSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -289,6 +290,7 @@ pub struct SubstratePipeline {
     navigation_intents: NavigationIntentRegistry,
     storage_quotas: StorageQuotaRegistry,
     clear_site_datas: ClearSiteDataRegistry,
+    audit_trails: AuditTrailRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -392,6 +394,7 @@ pub struct SubstratePipeline {
     navigation_intent_names: Vec<String>,
     storage_quota_names: Vec<String>,
     clear_site_data_names: Vec<String>,
+    audit_trail_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1077,6 +1080,15 @@ impl SubstratePipeline {
             clear_site_datas.extend(clear_site_data_specs);
         }
 
+        // Invention: tamper-evident audit trail. Disabled by default;
+        // user opts in via rc file. Only registers user-authored specs.
+        let audit_trail_specs: Vec<AuditTrailSpec> =
+            nami_core::audit_trail::compile(&ext_src).unwrap_or_default();
+        let audit_trail_names: Vec<String> =
+            audit_trail_specs.iter().map(|s| s.name.clone()).collect();
+        let mut audit_trails = AuditTrailRegistry::new();
+        audit_trails.extend(audit_trail_specs);
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1419,7 +1431,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1511,6 +1523,7 @@ impl SubstratePipeline {
             navigation_intents.len(),
             storage_quotas.len(),
             clear_site_datas.len(),
+            audit_trails.len(),
         );
 
         Self {
@@ -1603,6 +1616,7 @@ impl SubstratePipeline {
             navigation_intents,
             storage_quotas,
             clear_site_datas,
+            audit_trails,
             session_store,
             session_spec,
             wasm_agents,
@@ -1701,6 +1715,7 @@ impl SubstratePipeline {
             navigation_intent_names,
             storage_quota_names,
             clear_site_data_names,
+            audit_trail_names,
         }
     }
 
@@ -2136,6 +2151,30 @@ impl SubstratePipeline {
     pub fn clear_site_data_applicable(&self, host: &str) -> Vec<ClearSiteDataSpec> {
         self.clear_site_datas
             .applicable_to(host)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    // ── Audit trail (novel) ──────────────────────────────────────
+
+    #[must_use]
+    pub fn audit_trail_list(&self) -> Vec<AuditTrailSpec> {
+        self.audit_trails.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn audit_trail_get(&self, name: &str) -> Option<AuditTrailSpec> {
+        self.audit_trails.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn audit_trail_profiles_for(
+        &self,
+        kind: nami_core::audit_trail::EventKind,
+    ) -> Vec<AuditTrailSpec> {
+        self.audit_trails
+            .profiles_for(kind)
             .into_iter()
             .cloned()
             .collect()
@@ -3144,6 +3183,7 @@ impl SubstratePipeline {
             navigation_intents: self.navigation_intent_names.clone(),
             storage_quotas: self.storage_quota_names.clone(),
             clear_site_datas: self.clear_site_data_names.clone(),
+            audit_trails: self.audit_trail_names.clone(),
         }
     }
 

@@ -273,6 +273,7 @@ pub struct RulesInventory {
     pub navigation_intents: Vec<String>,
     pub storage_quotas: Vec<String>,
     pub clear_site_datas: Vec<String>,
+    pub audit_trails: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

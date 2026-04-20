@@ -188,6 +188,12 @@ pub fn router(service: NamimadoService) -> Router {
             "/clear-site-data/applicable",
             get(handle_clear_site_data_applicable),
         )
+        .route("/audit-trail", get(handle_audit_trail_list))
+        .route("/audit-trail/:name", get(handle_audit_trail_get))
+        .route(
+            "/audit-trail/for-event/:event",
+            get(handle_audit_trail_for_event),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1371,6 +1377,31 @@ async fn handle_clear_site_data_applicable(
     Query(q): Query<HostQuery>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.clear_site_data_applicable(&q.host.unwrap_or_default()))
+}
+
+async fn handle_audit_trail_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.audit_trail_list())
+}
+
+async fn handle_audit_trail_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.audit_trail_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("audit_trail_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_audit_trail_for_event(
+    State(svc): State<NamimadoService>,
+    Path(event): Path<String>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.audit_trail_for_event(&event))
 }
 
 async fn handle_inspector_list(
