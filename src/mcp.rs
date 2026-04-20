@@ -1850,6 +1850,24 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defsmart-bookmark) profile.")]
+    async fn smart_bookmark_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.smart_bookmark_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved smart-bookmark profile for a host.")]
+    async fn smart_bookmark_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.smart_bookmark_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_smart_bookmark_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

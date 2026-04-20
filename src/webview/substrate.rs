@@ -97,6 +97,7 @@ use nami_core::time_travel::{TimeTravelRegistry, TimeTravelSpec};
 use nami_core::locale::{LocaleRegistry, LocaleSpec};
 use nami_core::tab_macro::{TabMacroRegistry, TabMacroSpec};
 use nami_core::cookie_banner::{CookieBannerRegistry, CookieBannerSpec};
+use nami_core::smart_bookmark::{SmartBookmarkRegistry, SmartBookmarkSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -305,6 +306,7 @@ pub struct SubstratePipeline {
     locales: LocaleRegistry,
     tab_macros: TabMacroRegistry,
     cookie_banners: CookieBannerRegistry,
+    smart_bookmarks: SmartBookmarkRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -416,6 +418,7 @@ pub struct SubstratePipeline {
     locale_names: Vec<String>,
     tab_macro_names: Vec<String>,
     cookie_banner_names: Vec<String>,
+    smart_bookmark_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1206,6 +1209,21 @@ impl SubstratePipeline {
             cookie_banners.extend(cookie_banner_specs);
         }
 
+        // Smart bookmarks — AI-augmented.
+        let smart_bookmark_specs: Vec<SmartBookmarkSpec> =
+            nami_core::smart_bookmark::compile(&ext_src).unwrap_or_default();
+        let smart_bookmark_names: Vec<String> = if smart_bookmark_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            smart_bookmark_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut smart_bookmarks = SmartBookmarkRegistry::new();
+        if smart_bookmark_specs.is_empty() {
+            smart_bookmarks.insert(SmartBookmarkSpec::default_profile());
+        } else {
+            smart_bookmarks.extend(smart_bookmark_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1548,7 +1566,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1648,6 +1666,7 @@ impl SubstratePipeline {
             locales.len(),
             tab_macros.len(),
             cookie_banners.len(),
+            smart_bookmarks.len(),
         );
 
         Self {
@@ -1748,6 +1767,7 @@ impl SubstratePipeline {
             locales,
             tab_macros,
             cookie_banners,
+            smart_bookmarks,
             session_store,
             session_spec,
             wasm_agents,
@@ -1854,6 +1874,7 @@ impl SubstratePipeline {
             locale_names,
             tab_macro_names,
             cookie_banner_names,
+            smart_bookmark_names,
         }
     }
 
@@ -2452,6 +2473,18 @@ impl SubstratePipeline {
         self.cookie_banners
             .resolve(host)
             .and_then(CookieBannerSpec::render_hide_css)
+    }
+
+    // ── Smart bookmark (novel) ───────────────────────────────────
+
+    #[must_use]
+    pub fn smart_bookmark_list(&self) -> Vec<SmartBookmarkSpec> {
+        self.smart_bookmarks.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn smart_bookmark_for(&self, host: &str) -> Option<SmartBookmarkSpec> {
+        self.smart_bookmarks.resolve(host).cloned()
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3494,6 +3527,7 @@ impl SubstratePipeline {
             locales: self.locale_names.clone(),
             tab_macros: self.tab_macro_names.clone(),
             cookie_banners: self.cookie_banner_names.clone(),
+            smart_bookmarks: self.smart_bookmark_names.clone(),
         }
     }
 

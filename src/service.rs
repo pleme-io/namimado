@@ -1844,6 +1844,33 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn cookie_banner_hide_css(&self, _h: &str) -> Option<String> { None }
 
+    // ── Smart bookmark (novel) ───────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn smart_bookmark_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .smart_bookmark_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn smart_bookmark_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .smart_bookmark_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn smart_bookmark_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn smart_bookmark_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3979,6 +4006,13 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn smart_bookmark_default_auto_registers() {
+        let svc = NamimadoService::new();
+        assert!(!svc.smart_bookmark_list().is_empty());
+        assert!(svc.smart_bookmark_for("example.com").is_some());
     }
 
     #[test]

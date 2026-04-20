@@ -228,6 +228,8 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/cookie-banner", get(handle_cookie_banner_list))
         .route("/cookie-banner/resolve", get(handle_cookie_banner_for))
         .route("/cookie-banner/hide-css", get(handle_cookie_banner_hide_css))
+        .route("/smart-bookmark", get(handle_smart_bookmark_list))
+        .route("/smart-bookmark/resolve", get(handle_smart_bookmark_for))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1668,6 +1670,26 @@ async fn handle_cookie_banner_hide_css(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_cookie_banner_hide_css"),
+            )
+        })
+}
+
+async fn handle_smart_bookmark_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.smart_bookmark_list())
+}
+
+async fn handle_smart_bookmark_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.smart_bookmark_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_smart_bookmark_matches"),
             )
         })
 }
