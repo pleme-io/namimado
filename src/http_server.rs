@@ -194,6 +194,9 @@ pub fn router(service: NamimadoService) -> Router {
             "/audit-trail/for-event/:event",
             get(handle_audit_trail_for_event),
         )
+        .route("/viewport", get(handle_viewport_list))
+        .route("/viewport/resolve", get(handle_viewport_for))
+        .route("/viewport/meta", get(handle_viewport_meta))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1402,6 +1405,40 @@ async fn handle_audit_trail_for_event(
     Path(event): Path<String>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.audit_trail_for_event(&event))
+}
+
+async fn handle_viewport_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.viewport_list())
+}
+
+async fn handle_viewport_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.viewport_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_viewport_matches"),
+            )
+        })
+}
+
+async fn handle_viewport_meta(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.viewport_meta_for(&q.host.unwrap_or_default())
+        .map(|m| Json(serde_json::json!({ "meta": m })))
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_viewport_matches"),
+            )
+        })
 }
 
 async fn handle_inspector_list(

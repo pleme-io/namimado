@@ -90,6 +90,7 @@ use nami_core::navigation_intent::{NavigationIntentRegistry, NavigationIntentSpe
 use nami_core::storage_quota::{StorageQuotaRegistry, StorageQuotaSpec};
 use nami_core::clear_site_data::{ClearSiteDataRegistry, ClearSiteDataSpec};
 use nami_core::audit_trail::{AuditTrailRegistry, AuditTrailSpec};
+use nami_core::viewport::{ViewportRegistry, ViewportSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -291,6 +292,7 @@ pub struct SubstratePipeline {
     storage_quotas: StorageQuotaRegistry,
     clear_site_datas: ClearSiteDataRegistry,
     audit_trails: AuditTrailRegistry,
+    viewports: ViewportRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -395,6 +397,7 @@ pub struct SubstratePipeline {
     storage_quota_names: Vec<String>,
     clear_site_data_names: Vec<String>,
     audit_trail_names: Vec<String>,
+    viewport_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1089,6 +1092,21 @@ impl SubstratePipeline {
         let mut audit_trails = AuditTrailRegistry::new();
         audit_trails.extend(audit_trail_specs);
 
+        // Viewport — mobile rendering policy.
+        let viewport_specs: Vec<ViewportSpec> =
+            nami_core::viewport::compile(&ext_src).unwrap_or_default();
+        let viewport_names: Vec<String> = if viewport_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            viewport_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut viewports = ViewportRegistry::new();
+        if viewport_specs.is_empty() {
+            viewports.insert(ViewportSpec::default_profile());
+        } else {
+            viewports.extend(viewport_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1431,7 +1449,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1524,6 +1542,7 @@ impl SubstratePipeline {
             storage_quotas.len(),
             clear_site_datas.len(),
             audit_trails.len(),
+            viewports.len(),
         );
 
         Self {
@@ -1617,6 +1636,7 @@ impl SubstratePipeline {
             storage_quotas,
             clear_site_datas,
             audit_trails,
+            viewports,
             session_store,
             session_spec,
             wasm_agents,
@@ -1716,6 +1736,7 @@ impl SubstratePipeline {
             storage_quota_names,
             clear_site_data_names,
             audit_trail_names,
+            viewport_names,
         }
     }
 
@@ -2178,6 +2199,24 @@ impl SubstratePipeline {
             .into_iter()
             .cloned()
             .collect()
+    }
+
+    // ── Viewport ─────────────────────────────────────────────────
+
+    #[must_use]
+    pub fn viewport_list(&self) -> Vec<ViewportSpec> {
+        self.viewports.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn viewport_for(&self, host: &str) -> Option<ViewportSpec> {
+        self.viewports.resolve(host).cloned()
+    }
+
+    /// Synthesized `<meta name=viewport>` string for `host`.
+    #[must_use]
+    pub fn viewport_meta_for(&self, host: &str) -> Option<String> {
+        self.viewports.resolve(host).map(|s| s.render_meta())
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -3184,6 +3223,7 @@ impl SubstratePipeline {
             storage_quotas: self.storage_quota_names.clone(),
             clear_site_datas: self.clear_site_data_names.clone(),
             audit_trails: self.audit_trail_names.clone(),
+            viewports: self.viewport_names.clone(),
         }
     }
 

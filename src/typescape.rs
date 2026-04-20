@@ -339,6 +339,9 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/audit-trail", "Every (defaudit-trail) profile (privacy-first: empty by default)."),
         mk("GET", "/audit-trail/:name", "Full AuditTrailSpec by name."),
         mk("GET", "/audit-trail/for-event/:event", "Audit profiles that capture a given event."),
+        mk("GET", "/viewport", "Every (defviewport) profile."),
+        mk("GET", "/viewport/resolve", "Viewport profile for `?host=…`."),
+        mk("GET", "/viewport/meta", "Synthesized `<meta name=viewport>` for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -532,6 +535,9 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("audit_trail_list", "Every (defaudit-trail) profile."),
         mk("audit_trail_get", "Full AuditTrailSpec by name."),
         mk("audit_trail_for_event", "Audit profiles that capture a given event."),
+        mk("viewport_list", "Every (defviewport) profile."),
+        mk("viewport_for", "Viewport profile for a host."),
+        mk("viewport_meta", "Synthesized `<meta name=viewport>` for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -655,6 +661,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 93, "93 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 94, "94 DSL keywords expected in nami-core");
     }
 }

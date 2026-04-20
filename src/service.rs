@@ -1570,6 +1570,41 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn audit_trail_for_event(&self, _e: &str) -> Vec<serde_json::Value> { Vec::new() }
 
+    // ── Viewport ─────────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn viewport_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .viewport_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn viewport_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .viewport_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn viewport_meta_for(&self, host: &str) -> Option<String> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.viewport_meta_for(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn viewport_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn viewport_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn viewport_meta_for(&self, _h: &str) -> Option<String> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3692,6 +3727,16 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn viewport_default_force_yes_user_scalable_a11y_win() {
+        let svc = NamimadoService::new();
+        assert!(!svc.viewport_list().is_empty());
+        let meta = svc.viewport_meta_for("example.com").unwrap();
+        // Default is ForceYes → meta string always says user-scalable=yes.
+        assert!(meta.contains("user-scalable=yes"));
+        assert!(meta.contains("width=device-width"));
     }
 
     #[test]
