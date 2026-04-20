@@ -301,6 +301,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/totp/:name", "Full TotpSpec for one profile."),
         mk("GET", "/totp/:name/code", "Current TOTP code + seconds-remaining."),
         mk("GET", "/totp/for-identity/:identity", "All TOTP profiles linked to a named identity."),
+        mk("GET", "/fingerprint-randomize", "Every (deffingerprint-randomize) profile."),
+        mk("GET", "/fingerprint-randomize/resolve", "Fingerprint-randomize profile for `?host=…`."),
+        mk("GET", "/cookie-jar", "Every (defcookie-jar) profile."),
+        mk("GET", "/cookie-jar/resolve", "Cookie-jar profile for `?host=…`."),
+        mk("GET", "/webgpu-policy", "Every (defwebgpu-policy) profile."),
+        mk("GET", "/webgpu-policy/resolve", "Webgpu-policy profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -456,6 +462,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("totp_get", "Full TotpSpec for one profile by name."),
         mk("totp_for_identity", "All TOTP profiles linked to a named identity."),
         mk("totp_code", "Current TOTP code + seconds-remaining for a profile."),
+        mk("fingerprint_randomize_list", "Every (deffingerprint-randomize) profile."),
+        mk("fingerprint_randomize_for", "Fingerprint-randomize profile for a host."),
+        mk("cookie_jar_list", "Every (defcookie-jar) profile."),
+        mk("cookie_jar_for", "Cookie-jar profile for a host."),
+        mk("webgpu_policy_list", "Every (defwebgpu-policy) profile."),
+        mk("webgpu_policy_for", "Webgpu-policy profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -579,6 +591,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 78, "78 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 81, "81 DSL keywords expected in nami-core");
     }
 }

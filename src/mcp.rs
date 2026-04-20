@@ -1173,6 +1173,61 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (deffingerprint-randomize) profile.")]
+    async fn fingerprint_randomize_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.fingerprint_randomize_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved fingerprint-randomize profile for a host.")]
+    async fn fingerprint_randomize_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.fingerprint_randomize_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_fingerprint_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defcookie-jar) profile.")]
+    async fn cookie_jar_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.cookie_jar_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved cookie-jar profile for a host.")]
+    async fn cookie_jar_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.cookie_jar_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_cookie_jar_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defwebgpu-policy) profile.")]
+    async fn webgpu_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.webgpu_policy_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved webgpu-policy profile for a host.")]
+    async fn webgpu_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.webgpu_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_webgpu_policy_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

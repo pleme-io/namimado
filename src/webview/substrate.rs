@@ -75,6 +75,9 @@ use nami_core::search_engine::{SearchEngineRegistry, SearchEngineSpec};
 use nami_core::search_bang::{SearchBangRegistry, SearchBangSpec};
 use nami_core::identity::{IdentityRegistry, IdentitySpec};
 use nami_core::totp::{TotpRegistry, TotpSpec};
+use nami_core::fingerprint_randomize::{FingerprintRandomizeRegistry, FingerprintRandomizeSpec};
+use nami_core::cookie_jar::{CookieJarRegistry, CookieJarSpec};
+use nami_core::webgpu_policy::{WebgpuPolicyRegistry, WebgpuPolicySpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -261,6 +264,9 @@ pub struct SubstratePipeline {
     search_bangs: SearchBangRegistry,
     identities: IdentityRegistry,
     totps: TotpRegistry,
+    fingerprint_randomizes: FingerprintRandomizeRegistry,
+    cookie_jars: CookieJarRegistry,
+    webgpu_policies: WebgpuPolicyRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -350,6 +356,9 @@ pub struct SubstratePipeline {
     search_bang_triggers: Vec<String>,
     identity_names: Vec<String>,
     totp_names: Vec<String>,
+    fingerprint_randomize_names: Vec<String>,
+    cookie_jar_names: Vec<String>,
+    webgpu_policy_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -819,6 +828,52 @@ impl SubstratePipeline {
         let mut totps = TotpRegistry::new();
         totps.extend(totp_specs);
 
+        // Privacy v2 pack — fingerprint farbling, cookie jars, WebGPU gating.
+        let fingerprint_randomize_specs: Vec<FingerprintRandomizeSpec> =
+            nami_core::fingerprint_randomize::compile(&ext_src).unwrap_or_default();
+        let fingerprint_randomize_names: Vec<String> = if fingerprint_randomize_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            fingerprint_randomize_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut fingerprint_randomizes = FingerprintRandomizeRegistry::new();
+        if fingerprint_randomize_specs.is_empty() {
+            fingerprint_randomizes.insert(FingerprintRandomizeSpec::default_profile());
+        } else {
+            fingerprint_randomizes.extend(fingerprint_randomize_specs);
+        }
+
+        let cookie_jar_specs: Vec<CookieJarSpec> =
+            nami_core::cookie_jar::compile(&ext_src).unwrap_or_default();
+        let cookie_jar_names: Vec<String> = if cookie_jar_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            cookie_jar_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut cookie_jars = CookieJarRegistry::new();
+        if cookie_jar_specs.is_empty() {
+            cookie_jars.insert(CookieJarSpec::default_profile());
+        } else {
+            cookie_jars.extend(cookie_jar_specs);
+        }
+
+        let webgpu_policy_specs: Vec<WebgpuPolicySpec> =
+            nami_core::webgpu_policy::compile(&ext_src).unwrap_or_default();
+        let webgpu_policy_names: Vec<String> = if webgpu_policy_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            webgpu_policy_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut webgpu_policies = WebgpuPolicyRegistry::new();
+        if webgpu_policy_specs.is_empty() {
+            webgpu_policies.insert(WebgpuPolicySpec::default_profile());
+        } else {
+            webgpu_policies.extend(webgpu_policy_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1161,7 +1216,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1239,6 +1294,9 @@ impl SubstratePipeline {
             search_bangs.len(),
             identities.len(),
             totps.len(),
+            fingerprint_randomizes.len(),
+            cookie_jars.len(),
+            webgpu_policies.len(),
         );
 
         Self {
@@ -1317,6 +1375,9 @@ impl SubstratePipeline {
             search_bangs,
             identities,
             totps,
+            fingerprint_randomizes,
+            cookie_jars,
+            webgpu_policies,
             session_store,
             session_spec,
             wasm_agents,
@@ -1401,6 +1462,9 @@ impl SubstratePipeline {
             search_bang_triggers,
             identity_names,
             totp_names,
+            fingerprint_randomize_names,
+            cookie_jar_names,
+            webgpu_policy_names,
         }
     }
 
@@ -1600,6 +1664,38 @@ impl SubstratePipeline {
         self.totps
             .get(name)
             .map(|s| s.generate_now().map_err(|e| e.to_string()))
+    }
+
+    // ── Privacy v2 pack ──────────────────────────────────────────
+
+    #[must_use]
+    pub fn fingerprint_randomize_list(&self) -> Vec<FingerprintRandomizeSpec> {
+        self.fingerprint_randomizes.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn fingerprint_randomize_for(&self, host: &str) -> Option<FingerprintRandomizeSpec> {
+        self.fingerprint_randomizes.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn cookie_jar_list(&self) -> Vec<CookieJarSpec> {
+        self.cookie_jars.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn cookie_jar_for(&self, host: &str) -> Option<CookieJarSpec> {
+        self.cookie_jars.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn webgpu_policy_list(&self) -> Vec<WebgpuPolicySpec> {
+        self.webgpu_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn webgpu_policy_for(&self, host: &str) -> Option<WebgpuPolicySpec> {
+        self.webgpu_policies.resolve(host).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2591,6 +2687,9 @@ impl SubstratePipeline {
             search_bangs: self.search_bang_triggers.clone(),
             identities: self.identity_names.clone(),
             totps: self.totp_names.clone(),
+            fingerprint_randomizes: self.fingerprint_randomize_names.clone(),
+            cookie_jars: self.cookie_jar_names.clone(),
+            webgpu_policies: self.webgpu_policy_names.clone(),
         }
     }
 

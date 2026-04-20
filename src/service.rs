@@ -1052,6 +1052,81 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn totp_code(&self, _n: &str) -> Option<Result<serde_json::Value, String>> { None }
 
+    // ── Privacy v2 pack ──────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn fingerprint_randomize_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .fingerprint_randomize_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn fingerprint_randomize_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .fingerprint_randomize_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cookie_jar_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cookie_jar_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cookie_jar_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cookie_jar_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn webgpu_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .webgpu_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn webgpu_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .webgpu_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn fingerprint_randomize_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn fingerprint_randomize_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cookie_jar_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cookie_jar_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn webgpu_policy_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn webgpu_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3097,6 +3172,17 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn privacy_v2_pack_auto_registers_all_three_defaults() {
+        let svc = NamimadoService::new();
+        assert!(!svc.fingerprint_randomize_list().is_empty());
+        assert!(!svc.cookie_jar_list().is_empty());
+        assert!(!svc.webgpu_policy_list().is_empty());
+        assert!(svc.fingerprint_randomize_for("example.com").is_some());
+        assert!(svc.cookie_jar_for("example.com").is_some());
+        assert!(svc.webgpu_policy_for("example.com").is_some());
     }
 
     #[test]

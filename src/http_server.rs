@@ -117,6 +117,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/totp/:name", get(handle_totp_get))
         .route("/totp/:name/code", get(handle_totp_code))
         .route("/totp/for-identity/:identity", get(handle_totp_for_identity))
+        .route("/fingerprint-randomize", get(handle_fingerprint_list))
+        .route("/fingerprint-randomize/resolve", get(handle_fingerprint_for))
+        .route("/cookie-jar", get(handle_cookie_jar_list))
+        .route("/cookie-jar/resolve", get(handle_cookie_jar_for))
+        .route("/webgpu-policy", get(handle_webgpu_policy_list))
+        .route("/webgpu-policy/resolve", get(handle_webgpu_policy_for))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -917,6 +923,66 @@ async fn handle_totp_for_identity(
     Path(identity): Path<String>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.totp_for_identity(&identity))
+}
+
+async fn handle_fingerprint_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.fingerprint_randomize_list())
+}
+
+async fn handle_fingerprint_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.fingerprint_randomize_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_fingerprint_matches"),
+            )
+        })
+}
+
+async fn handle_cookie_jar_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.cookie_jar_list())
+}
+
+async fn handle_cookie_jar_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.cookie_jar_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_cookie_jar_matches"),
+            )
+        })
+}
+
+async fn handle_webgpu_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.webgpu_policy_list())
+}
+
+async fn handle_webgpu_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.webgpu_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_webgpu_policy_matches"),
+            )
+        })
 }
 
 async fn handle_inspector_list(
