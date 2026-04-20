@@ -1691,6 +1691,46 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn network_throttle_effective(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Time-travel (novel) ──────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn time_travel_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .time_travel_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn time_travel_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .time_travel_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn time_travel_applicable(&self, host: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .time_travel_applicable(host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn time_travel_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn time_travel_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn time_travel_applicable(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3813,6 +3853,14 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn time_travel_defaults_off_privacy_first() {
+        let svc = NamimadoService::new();
+        // Novel DSL — privacy-first: empty until user opts in.
+        assert!(svc.time_travel_list().is_empty());
+        assert!(svc.time_travel_applicable("example.com").is_empty());
     }
 
     #[test]

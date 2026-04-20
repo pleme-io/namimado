@@ -93,6 +93,7 @@ use nami_core::audit_trail::{AuditTrailRegistry, AuditTrailSpec};
 use nami_core::viewport::{ViewportRegistry, ViewportSpec};
 use nami_core::csp_policy::{CspPolicyRegistry, CspPolicySpec};
 use nami_core::network_throttle::{NetworkThrottleRegistry, NetworkThrottleSpec};
+use nami_core::time_travel::{TimeTravelRegistry, TimeTravelSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -297,6 +298,7 @@ pub struct SubstratePipeline {
     viewports: ViewportRegistry,
     csp_policies: CspPolicyRegistry,
     network_throttles: NetworkThrottleRegistry,
+    time_travels: TimeTravelRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -404,6 +406,7 @@ pub struct SubstratePipeline {
     viewport_names: Vec<String>,
     csp_policy_names: Vec<String>,
     network_throttle_names: Vec<String>,
+    time_travel_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1146,6 +1149,15 @@ impl SubstratePipeline {
             network_throttles.extend(network_throttle_specs);
         }
 
+        // Time-travel (novel) — privacy-first: only user-authored
+        // specs register. No auto-default.
+        let time_travel_specs: Vec<TimeTravelSpec> =
+            nami_core::time_travel::compile(&ext_src).unwrap_or_default();
+        let time_travel_names: Vec<String> =
+            time_travel_specs.iter().map(|s| s.name.clone()).collect();
+        let mut time_travels = TimeTravelRegistry::new();
+        time_travels.extend(time_travel_specs);
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1488,7 +1500,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1584,6 +1596,7 @@ impl SubstratePipeline {
             viewports.len(),
             csp_policies.len(),
             network_throttles.len(),
+            time_travels.len(),
         );
 
         Self {
@@ -1680,6 +1693,7 @@ impl SubstratePipeline {
             viewports,
             csp_policies,
             network_throttles,
+            time_travels,
             session_store,
             session_spec,
             wasm_agents,
@@ -1782,6 +1796,7 @@ impl SubstratePipeline {
             viewport_names,
             csp_policy_names,
             network_throttle_names,
+            time_travel_names,
         }
     }
 
@@ -2302,6 +2317,27 @@ impl SubstratePipeline {
     #[must_use]
     pub fn network_throttle_for(&self, host: &str) -> Option<NetworkThrottleSpec> {
         self.network_throttles.resolve(host).cloned()
+    }
+
+    // ── Time-travel (novel) ──────────────────────────────────────
+
+    #[must_use]
+    pub fn time_travel_list(&self) -> Vec<TimeTravelSpec> {
+        self.time_travels.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn time_travel_get(&self, name: &str) -> Option<TimeTravelSpec> {
+        self.time_travels.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn time_travel_applicable(&self, host: &str) -> Vec<TimeTravelSpec> {
+        self.time_travels
+            .applicable_to(host)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// {download_kbps, upload_kbps, latency_ms, admits} for `host`.
@@ -3327,6 +3363,7 @@ impl SubstratePipeline {
             viewports: self.viewport_names.clone(),
             csp_policies: self.csp_policy_names.clone(),
             network_throttles: self.network_throttle_names.clone(),
+            time_travels: self.time_travel_names.clone(),
         }
     }
 

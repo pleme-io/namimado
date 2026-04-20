@@ -210,6 +210,12 @@ pub fn router(service: NamimadoService) -> Router {
             "/network-throttle/effective",
             get(handle_network_throttle_effective),
         )
+        .route("/time-travel", get(handle_time_travel_list))
+        .route("/time-travel/:name", get(handle_time_travel_get))
+        .route(
+            "/time-travel/applicable",
+            get(handle_time_travel_applicable),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1534,6 +1540,31 @@ async fn handle_network_throttle_effective(
                 ApiError::new("no_network_throttle_matches"),
             )
         })
+}
+
+async fn handle_time_travel_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.time_travel_list())
+}
+
+async fn handle_time_travel_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.time_travel_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("time_travel_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_time_travel_applicable(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.time_travel_applicable(&q.host.unwrap_or_default()))
 }
 
 async fn handle_inspector_list(

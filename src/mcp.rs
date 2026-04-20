@@ -1720,6 +1720,38 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (deftime-travel) profile (privacy-first — empty until opt-in).")]
+    async fn time_travel_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.time_travel_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full TimeTravelSpec for one profile by name.")]
+    async fn time_travel_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.time_travel_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "time_travel_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Time-travel profiles applicable to a host (enabled + not exempt).")]
+    async fn time_travel_applicable(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.time_travel_applicable(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
