@@ -2016,6 +2016,24 @@ impl NamimadoMcpServer {
         })))
     }
 
+    #[tool(description = "List every (defdom-diff) profile.")]
+    async fn dom_diff_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.dom_diff_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved dom-diff profile for a host.")]
+    async fn dom_diff_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.dom_diff_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_dom_diff_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

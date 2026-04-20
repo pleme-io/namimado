@@ -2041,6 +2041,33 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn referrer_header_for(&self, _f: &str, _t: &str) -> Option<String> { None }
 
+    // ── DOM diff (Lisp-native DOM diffing) ───────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn dom_diff_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .dom_diff_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn dom_diff_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .dom_diff_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn dom_diff_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn dom_diff_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -4247,6 +4274,14 @@ mod tests {
         let css = svc.text_spacing_css("example.com").unwrap();
         assert!(css.contains("line-height: 1.5"));
         assert!(css.contains("!important"));
+    }
+
+    #[test]
+    fn dom_diff_default_is_privacy_first() {
+        let svc = NamimadoService::new();
+        assert!(!svc.dom_diff_list().is_empty());
+        // Default is DISABLED → resolve returns nothing.
+        assert!(svc.dom_diff_for("example.com").is_none());
     }
 
     #[test]

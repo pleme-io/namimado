@@ -242,6 +242,8 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/referrer", get(handle_referrer_list))
         .route("/referrer/resolve", get(handle_referrer_for))
         .route("/referrer/header", get(handle_referrer_header))
+        .route("/dom-diff", get(handle_dom_diff_list))
+        .route("/dom-diff/resolve", get(handle_dom_diff_for))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1861,6 +1863,26 @@ async fn handle_referrer_header(
     Json(serde_json::json!({
         "referer": svc.referrer_header_for(&from, &to),
     }))
+}
+
+async fn handle_dom_diff_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.dom_diff_list())
+}
+
+async fn handle_dom_diff_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.dom_diff_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_dom_diff_matches"),
+            )
+        })
 }
 
 async fn handle_inspector_list(

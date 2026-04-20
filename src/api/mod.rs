@@ -286,6 +286,7 @@ pub struct RulesInventory {
     pub autoplays: Vec<String>,
     pub tab_attestations: Vec<String>,
     pub referrers: Vec<String>,
+    pub dom_diffs: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

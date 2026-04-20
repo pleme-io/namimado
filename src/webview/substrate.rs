@@ -102,6 +102,7 @@ use nami_core::text_spacing::{TextSpacingRegistry, TextSpacingSpec};
 use nami_core::autoplay::{AutoplayRegistry, AutoplaySpec};
 use nami_core::tab_attestation::{TabAttestationRegistry, TabAttestationSpec};
 use nami_core::referrer::{ReferrerRegistry, ReferrerSpec};
+use nami_core::dom_diff::{DomDiffRegistry, DomDiffSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -315,6 +316,7 @@ pub struct SubstratePipeline {
     autoplays: AutoplayRegistry,
     tab_attestations: TabAttestationRegistry,
     referrers: ReferrerRegistry,
+    dom_diffs: DomDiffRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -431,6 +433,7 @@ pub struct SubstratePipeline {
     autoplay_names: Vec<String>,
     tab_attestation_names: Vec<String>,
     referrer_names: Vec<String>,
+    dom_diff_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1296,6 +1299,21 @@ impl SubstratePipeline {
             referrers.extend(referrer_specs);
         }
 
+        // DOM diff watcher — Lisp-native DOM diffing rules.
+        let dom_diff_specs: Vec<DomDiffSpec> =
+            nami_core::dom_diff::compile(&ext_src).unwrap_or_default();
+        let dom_diff_names: Vec<String> = if dom_diff_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            dom_diff_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut dom_diffs = DomDiffRegistry::new();
+        if dom_diff_specs.is_empty() {
+            dom_diffs.insert(DomDiffSpec::default_profile());
+        } else {
+            dom_diffs.extend(dom_diff_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1638,7 +1656,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay · {} tab-attestation · {} referrer",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay · {} tab-attestation · {} referrer · {} dom-diff",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1743,6 +1761,7 @@ impl SubstratePipeline {
             autoplays.len(),
             tab_attestations.len(),
             referrers.len(),
+            dom_diffs.len(),
         );
 
         Self {
@@ -1848,6 +1867,7 @@ impl SubstratePipeline {
             autoplays,
             tab_attestations,
             referrers,
+            dom_diffs,
             session_store,
             session_spec,
             wasm_agents,
@@ -1959,6 +1979,7 @@ impl SubstratePipeline {
             autoplay_names,
             tab_attestation_names,
             referrer_names,
+            dom_diff_names,
         }
     }
 
@@ -2658,6 +2679,18 @@ impl SubstratePipeline {
     ) -> Option<String> {
         let spec = self.referrers.resolve(to.host)?;
         spec.header_for(from, to)
+    }
+
+    // ── DOM diff (Lisp-native DOM diffing) ────────────────────────
+
+    #[must_use]
+    pub fn dom_diff_list(&self) -> Vec<DomDiffSpec> {
+        self.dom_diffs.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn dom_diff_for(&self, host: &str) -> Option<DomDiffSpec> {
+        self.dom_diffs.resolve(host).cloned()
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3705,6 +3738,7 @@ impl SubstratePipeline {
             autoplays: self.autoplay_names.clone(),
             tab_attestations: self.tab_attestation_names.clone(),
             referrers: self.referrer_names.clone(),
+            dom_diffs: self.dom_diff_names.clone(),
         }
     }
 
