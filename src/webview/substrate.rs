@@ -92,6 +92,7 @@ use nami_core::clear_site_data::{ClearSiteDataRegistry, ClearSiteDataSpec};
 use nami_core::audit_trail::{AuditTrailRegistry, AuditTrailSpec};
 use nami_core::viewport::{ViewportRegistry, ViewportSpec};
 use nami_core::csp_policy::{CspPolicyRegistry, CspPolicySpec};
+use nami_core::network_throttle::{NetworkThrottleRegistry, NetworkThrottleSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -295,6 +296,7 @@ pub struct SubstratePipeline {
     audit_trails: AuditTrailRegistry,
     viewports: ViewportRegistry,
     csp_policies: CspPolicyRegistry,
+    network_throttles: NetworkThrottleRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -401,6 +403,7 @@ pub struct SubstratePipeline {
     audit_trail_names: Vec<String>,
     viewport_names: Vec<String>,
     csp_policy_names: Vec<String>,
+    network_throttle_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1125,6 +1128,24 @@ impl SubstratePipeline {
             csp_policies.extend(csp_policy_specs);
         }
 
+        // DevTools network throttling.
+        let network_throttle_specs: Vec<NetworkThrottleSpec> =
+            nami_core::network_throttle::compile(&ext_src).unwrap_or_default();
+        let network_throttle_names: Vec<String> = if network_throttle_specs.is_empty() {
+            vec!["unthrottled".to_owned()]
+        } else {
+            network_throttle_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut network_throttles = NetworkThrottleRegistry::new();
+        if network_throttle_specs.is_empty() {
+            network_throttles.insert(NetworkThrottleSpec::default_profile());
+        } else {
+            network_throttles.extend(network_throttle_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1467,7 +1488,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1562,6 +1583,7 @@ impl SubstratePipeline {
             audit_trails.len(),
             viewports.len(),
             csp_policies.len(),
+            network_throttles.len(),
         );
 
         Self {
@@ -1657,6 +1679,7 @@ impl SubstratePipeline {
             audit_trails,
             viewports,
             csp_policies,
+            network_throttles,
             session_store,
             session_spec,
             wasm_agents,
@@ -1758,6 +1781,7 @@ impl SubstratePipeline {
             audit_trail_names,
             viewport_names,
             csp_policy_names,
+            network_throttle_names,
         }
     }
 
@@ -2266,6 +2290,34 @@ impl SubstratePipeline {
         self.csp_policies
             .resolve(host)
             .map(|s| s.validate().into_iter().map(|e| e.to_string()).collect())
+    }
+
+    // ── DevTools: network throttling ─────────────────────────────
+
+    #[must_use]
+    pub fn network_throttle_list(&self) -> Vec<NetworkThrottleSpec> {
+        self.network_throttles.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn network_throttle_for(&self, host: &str) -> Option<NetworkThrottleSpec> {
+        self.network_throttles.resolve(host).cloned()
+    }
+
+    /// {download_kbps, upload_kbps, latency_ms, admits} for `host`.
+    #[must_use]
+    pub fn network_throttle_effective(&self, host: &str) -> Option<serde_json::Value> {
+        let spec = self.network_throttles.resolve(host)?;
+        let e = spec.effective();
+        Some(serde_json::json!({
+            "download_kbps": e.download_kbps,
+            "upload_kbps": e.upload_kbps,
+            "latency_ms": e.latency_ms,
+            "admits": spec.admits(host),
+            "packet_loss_pct": spec.clamped_packet_loss(),
+            "jitter_ms": spec.jitter_ms,
+            "timeout_pct": spec.clamped_timeout(),
+        }))
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -3274,6 +3326,7 @@ impl SubstratePipeline {
             audit_trails: self.audit_trail_names.clone(),
             viewports: self.viewport_names.clone(),
             csp_policies: self.csp_policy_names.clone(),
+            network_throttles: self.network_throttle_names.clone(),
         }
     }
 

@@ -1690,6 +1690,36 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defnetwork-throttle) profile.")]
+    async fn network_throttle_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.network_throttle_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved network-throttle profile for a host.")]
+    async fn network_throttle_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.network_throttle_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_network_throttle_matches")),
+        }
+    }
+
+    #[tool(description = "Effective (download_kbps, upload_kbps, latency_ms, admits, …) tuple for a host.")]
+    async fn network_throttle_effective(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.network_throttle_effective(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_network_throttle_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

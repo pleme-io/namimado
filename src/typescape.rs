@@ -346,6 +346,9 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/csp-policy/resolve", "CSP policy for `?host=…`."),
         mk("GET", "/csp-policy/header", "Rendered {header_name, header_value} for `?host=…`."),
         mk("GET", "/csp-policy/validate", "Validation warnings for `?host=…`."),
+        mk("GET", "/network-throttle", "Every (defnetwork-throttle) profile."),
+        mk("GET", "/network-throttle/resolve", "Network-throttle profile for `?host=…`."),
+        mk("GET", "/network-throttle/effective", "Effective throttle tuple for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -546,6 +549,9 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("csp_policy_for", "CSP policy for a host."),
         mk("csp_header", "Rendered CSP {header_name, header_value} for a host."),
         mk("csp_validate", "Validation warnings for a host's CSP."),
+        mk("network_throttle_list", "Every (defnetwork-throttle) profile."),
+        mk("network_throttle_for", "Network-throttle profile for a host."),
+        mk("network_throttle_effective", "Effective throttle tuple for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -669,6 +675,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 95, "95 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 96, "96 DSL keywords expected in nami-core");
     }
 }

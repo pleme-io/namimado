@@ -1655,6 +1655,42 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn csp_validate_for(&self, _h: &str) -> Option<Vec<String>> { None }
 
+    // ── DevTools: network throttling ─────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn network_throttle_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .network_throttle_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn network_throttle_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .network_throttle_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// Effective (download/upload/latency/admits/etc) tuple for `host`.
+    #[cfg(feature = "browser-core")]
+    pub fn network_throttle_effective(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.network_throttle_effective(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn network_throttle_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn network_throttle_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn network_throttle_effective(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3777,6 +3813,16 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn network_throttle_default_is_unthrottled_and_admits_all() {
+        let svc = NamimadoService::new();
+        assert!(!svc.network_throttle_list().is_empty());
+        let e = svc.network_throttle_effective("example.com").unwrap();
+        assert_eq!(e["download_kbps"], 0);
+        assert_eq!(e["latency_ms"], 0);
+        assert_eq!(e["admits"], true);
     }
 
     #[test]

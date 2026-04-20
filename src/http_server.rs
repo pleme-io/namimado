@@ -201,6 +201,15 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/csp-policy/resolve", get(handle_csp_policy_for))
         .route("/csp-policy/header", get(handle_csp_header))
         .route("/csp-policy/validate", get(handle_csp_validate))
+        .route("/network-throttle", get(handle_network_throttle_list))
+        .route(
+            "/network-throttle/resolve",
+            get(handle_network_throttle_for),
+        )
+        .route(
+            "/network-throttle/effective",
+            get(handle_network_throttle_effective),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1489,6 +1498,40 @@ async fn handle_csp_validate(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_csp_policy_matches"),
+            )
+        })
+}
+
+async fn handle_network_throttle_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.network_throttle_list())
+}
+
+async fn handle_network_throttle_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.network_throttle_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_network_throttle_matches"),
+            )
+        })
+}
+
+async fn handle_network_throttle_effective(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.network_throttle_effective(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_network_throttle_matches"),
             )
         })
 }
