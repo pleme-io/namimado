@@ -53,9 +53,15 @@ use nami_core::session::{SessionSpec, SessionStore, TabRecord};
 use nami_core::annotate::{AnnotateRegistry, AnnotateSpec};
 use nami_core::auth_saver::{AuthSaverRegistry, AuthSaverSpec};
 use nami_core::autofill::{AutofillRegistry, AutofillSpec};
+use nami_core::chat::{ChatRegistry, ChatSpec};
+use nami_core::llm::{
+    EchoProvider, LlmProvider, LlmProviderRegistry, LlmProviderSpec,
+};
+use nami_core::llm_completion::{LlmCompletionRegistry, LlmCompletionSpec};
 use nami_core::passkey::{PasskeyRegistry, PasskeySpec};
 use nami_core::passwords::{PasswordsRegistry, PasswordsSpec};
 use nami_core::secure_note::{SecureNoteRegistry, SecureNoteSpec};
+use nami_core::summarize::{SummarizeRegistry, SummarizeSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
 use nami_core::download::{DownloadRegistry, DownloadSpec};
@@ -208,6 +214,11 @@ pub struct SubstratePipeline {
     auth_savers: AuthSaverRegistry,
     secure_notes: SecureNoteRegistry,
     passkeys: PasskeyRegistry,
+    llm_providers: LlmProviderRegistry,
+    llm_engine: Arc<dyn LlmProvider>,
+    summarizes: SummarizeRegistry,
+    chats: ChatRegistry,
+    llm_completions: LlmCompletionRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -272,6 +283,10 @@ pub struct SubstratePipeline {
     auth_saver_names: Vec<String>,
     secure_note_names: Vec<String>,
     passkey_names: Vec<String>,
+    llm_provider_names: Vec<String>,
+    summarize_names: Vec<String>,
+    chat_names: Vec<String>,
+    llm_completion_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -549,6 +564,38 @@ impl SubstratePipeline {
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
 
+        // AI pack — providers, summarize, chat, inline completion.
+        let llm_provider_specs: Vec<LlmProviderSpec> =
+            nami_core::llm::compile(&ext_src).unwrap_or_default();
+        let llm_provider_names: Vec<String> =
+            llm_provider_specs.iter().map(|s| s.name.clone()).collect();
+        let mut llm_providers = LlmProviderRegistry::new();
+        llm_providers.extend(llm_provider_specs);
+        let llm_engine: Arc<dyn LlmProvider> = Arc::new(EchoProvider::default());
+
+        let summarize_specs: Vec<SummarizeSpec> =
+            nami_core::summarize::compile(&ext_src).unwrap_or_default();
+        let summarize_names: Vec<String> =
+            summarize_specs.iter().map(|s| s.name.clone()).collect();
+        let mut summarizes = SummarizeRegistry::new();
+        summarizes.extend(summarize_specs);
+
+        let chat_specs: Vec<ChatSpec> =
+            nami_core::chat::compile(&ext_src).unwrap_or_default();
+        let chat_names: Vec<String> =
+            chat_specs.iter().map(|s| s.name.clone()).collect();
+        let mut chats = ChatRegistry::new();
+        chats.extend(chat_specs);
+
+        let llm_completion_specs: Vec<LlmCompletionSpec> =
+            nami_core::llm_completion::compile(&ext_src).unwrap_or_default();
+        let llm_completion_names: Vec<String> = llm_completion_specs
+            .iter()
+            .map(|s| s.name.clone())
+            .collect();
+        let mut llm_completions = LlmCompletionRegistry::new();
+        llm_completions.extend(llm_completion_specs);
+
         // Credentials pack.
         let autofill_specs: Vec<AutofillSpec> =
             nami_core::autofill::compile(&ext_src).unwrap_or_default();
@@ -787,7 +834,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -840,6 +887,10 @@ impl SubstratePipeline {
             auth_savers.len(),
             secure_notes.len(),
             passkeys.len(),
+            llm_providers.len(),
+            summarizes.len(),
+            chats.len(),
+            llm_completions.len(),
         );
 
         Self {
@@ -892,6 +943,11 @@ impl SubstratePipeline {
             auth_savers,
             secure_notes,
             passkeys,
+            llm_providers,
+            llm_engine,
+            summarizes,
+            chats,
+            llm_completions,
             session_store,
             session_spec,
             wasm_agents,
@@ -951,7 +1007,123 @@ impl SubstratePipeline {
             auth_saver_names,
             secure_note_names,
             passkey_names,
+            llm_provider_names,
+            summarize_names,
+            chat_names,
+            llm_completion_names,
         }
+    }
+
+    // ── AI pack ──────────────────────────────────────────────────
+
+    #[must_use]
+    pub fn llm_provider_list(&self) -> Vec<LlmProviderSpec> {
+        self.llm_providers.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn llm_provider_get(&self, name: &str) -> Option<LlmProviderSpec> {
+        self.llm_providers.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn llm_engine_name(&self) -> &'static str {
+        self.llm_engine.engine_name()
+    }
+
+    #[must_use]
+    pub fn summarize_list(&self) -> Vec<SummarizeSpec> {
+        self.summarizes.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn summarize_get(&self, name: &str) -> Option<SummarizeSpec> {
+        self.summarizes.get(name).cloned()
+    }
+
+    /// Run a summarize profile against source text.
+    pub fn summarize_run(
+        &self,
+        name: &str,
+        source: &str,
+    ) -> Result<nami_core::llm::LlmResponse, nami_core::llm::LlmError> {
+        let spec = self.summarizes.get(name).cloned().ok_or_else(|| {
+            nami_core::llm::LlmError::InvalidSpec(format!("no summarize '{name}'"))
+        })?;
+        let provider_spec = self
+            .llm_providers
+            .get(&spec.provider)
+            .cloned()
+            .ok_or_else(|| {
+                nami_core::llm::LlmError::InvalidSpec(format!(
+                    "no llm provider '{}'",
+                    spec.provider
+                ))
+            })?;
+        spec.run(&*self.llm_engine, &provider_spec, source)
+    }
+
+    #[must_use]
+    pub fn chat_list(&self) -> Vec<ChatSpec> {
+        self.chats.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn chat_get(&self, name: &str) -> Option<ChatSpec> {
+        self.chats.get(name).cloned()
+    }
+
+    /// Ask a chat profile a question against a page-context string.
+    pub fn chat_ask(
+        &self,
+        name: &str,
+        page_context: Option<&str>,
+        history: &[nami_core::llm::LlmMessage],
+        question: &str,
+    ) -> Result<nami_core::llm::LlmResponse, nami_core::llm::LlmError> {
+        let spec = self.chats.get(name).cloned().ok_or_else(|| {
+            nami_core::llm::LlmError::InvalidSpec(format!("no chat '{name}'"))
+        })?;
+        let provider_spec = self
+            .llm_providers
+            .get(&spec.provider)
+            .cloned()
+            .ok_or_else(|| {
+                nami_core::llm::LlmError::InvalidSpec(format!(
+                    "no llm provider '{}'",
+                    spec.provider
+                ))
+            })?;
+        spec.run(&*self.llm_engine, &provider_spec, page_context, history, question)
+    }
+
+    #[must_use]
+    pub fn llm_completion_list(&self) -> Vec<LlmCompletionSpec> {
+        self.llm_completions.specs().to_vec()
+    }
+
+    /// Run a completion profile against `prefix`.
+    pub fn llm_completion_run(
+        &self,
+        name: &str,
+        prefix: &str,
+    ) -> Result<nami_core::llm::LlmResponse, nami_core::llm::LlmError> {
+        let spec = self.llm_completions.get(name).cloned().ok_or_else(|| {
+            nami_core::llm::LlmError::InvalidSpec(format!(
+                "no llm-completion '{name}'"
+            ))
+        })?;
+        let provider_spec = self
+            .llm_providers
+            .get(&spec.provider)
+            .cloned()
+            .ok_or_else(|| {
+                nami_core::llm::LlmError::InvalidSpec(format!(
+                    "no llm provider '{}'",
+                    spec.provider
+                ))
+            })?;
+        spec.run(&*self.llm_engine, &provider_spec, prefix)
     }
 
     // ── Credentials pack ─────────────────────────────────────────
@@ -1742,6 +1914,10 @@ impl SubstratePipeline {
             auth_savers: self.auth_saver_names.clone(),
             secure_notes: self.secure_note_names.clone(),
             passkeys: self.passkey_names.clone(),
+            llm_providers: self.llm_provider_names.clone(),
+            summarizes: self.summarize_names.clone(),
+            chats: self.chat_names.clone(),
+            llm_completions: self.llm_completion_names.clone(),
         }
     }
 

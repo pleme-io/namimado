@@ -234,6 +234,10 @@ pub struct RulesInventory {
     pub auth_savers: Vec<String>,
     pub secure_notes: Vec<String>,
     pub passkeys: Vec<String>,
+    pub llm_providers: Vec<String>,
+    pub summarizes: Vec<String>,
+    pub chats: Vec<String>,
+    pub llm_completions: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -341,6 +345,59 @@ pub struct RoutingResolveResponse {
     pub via_kind: String,
     /// Strategy argument — tunnel name / isolation name / URL / etc.
     pub via_target: Option<String>,
+}
+
+/// POST /summarize — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SummarizeRequest {
+    /// `(defsummarize)` profile name.
+    pub profile: String,
+    /// Source text to summarize. For now the caller supplies this
+    /// directly; a future revision will let the profile pull it
+    /// automatically based on its `scope` (ReaderText/WholePage/…).
+    pub source: String,
+}
+
+/// POST /chat — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ChatAskRequest {
+    /// `(defchat-with-page)` profile name.
+    pub profile: String,
+    pub question: String,
+    /// Optional page context the chat should reference.
+    #[serde(default)]
+    pub page_context: Option<String>,
+    /// Prior conversation turns.
+    #[serde(default)]
+    pub history: Vec<LlmMessageDto>,
+}
+
+/// POST /llm-completion — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LlmCompletionRequest {
+    /// `(defllm-completion)` profile name.
+    pub profile: String,
+    pub prefix: String,
+}
+
+/// Wire shape for LlmMessage — mirrors nami_core::llm::LlmMessage.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LlmMessageDto {
+    pub role: String,
+    pub content: String,
+}
+
+/// Unified LLM response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LlmResponseDto {
+    pub outcome: String, // "ok" | "error"
+    pub content: Option<String>,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub model: Option<String>,
+    pub stopped: Option<String>,
+    pub engine: String,
+    pub error: Option<String>,
 }
 
 /// POST /spaces/:name/activate — response.

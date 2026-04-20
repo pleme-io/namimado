@@ -109,6 +109,26 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct SummarizeToolRequest {
+    profile: String,
+    source: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ChatAskToolRequest {
+    profile: String,
+    question: String,
+    page_context: Option<String>,
+    history: Option<Vec<crate::api::LlmMessageDto>>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct LlmCompletionToolRequest {
+    profile: String,
+    prefix: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct RpIdRequest {
     rp_id: String,
 }
@@ -776,6 +796,90 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(description = "List every (defllm-provider) declaration.")]
+    async fn llm_provider_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.llm_provider_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defsummarize) profile.")]
+    async fn summarize_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.summarize_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Run a (defsummarize) profile against source text. \
+                       Returns { outcome, content, tokens, engine, error? }."
+    )]
+    async fn summarize_run(
+        &self,
+        Parameters(req): Parameters<SummarizeToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::SummarizeRequest {
+            profile: req.profile,
+            source: req.source,
+        };
+        let resp = self.service.summarize_run(api_req);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defchat-with-page) profile.")]
+    async fn chat_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.chat_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Ask a (defchat-with-page) profile a question against \
+                       optional page context + history. Returns LlmResponseDto."
+    )]
+    async fn chat_ask(
+        &self,
+        Parameters(req): Parameters<ChatAskToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::ChatAskRequest {
+            profile: req.profile,
+            question: req.question,
+            page_context: req.page_context,
+            history: req.history.unwrap_or_default(),
+        };
+        let resp = self.service.chat_ask(api_req);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defllm-completion) profile.")]
+    async fn llm_completion_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.llm_completion_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Run a (defllm-completion) profile against a prefix. \
+                       Returns LlmResponseDto."
+    )]
+    async fn llm_completion_run(
+        &self,
+        Parameters(req): Parameters<LlmCompletionToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::LlmCompletionRequest {
+            profile: req.profile,
+            prefix: req.prefix,
+        };
+        let resp = self.service.llm_completion_run(api_req);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List every (defautofill) profile.")]

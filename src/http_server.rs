@@ -22,7 +22,8 @@ use crate::api::{
     GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, JsEvalRequest,
     JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse, PipResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
-    OutlineRequest, RedirectRequest, RoutingResolveResponse, SessionTabInfo,
+    ChatAskRequest, LlmCompletionRequest, LlmResponseDto, OutlineRequest, RedirectRequest,
+    RoutingResolveResponse, SummarizeRequest, SessionTabInfo,
     UrlCleanRequest, UrlRewriteResponse, SnapshotRecipeResponse, SpaceActivateResponse,
     SpaceActiveResponse,
     StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest,
@@ -71,6 +72,13 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/llm-providers", get(handle_llm_provider_list))
+        .route("/summarize", get(handle_summarize_list).post(handle_summarize_run))
+        .route("/chat", get(handle_chat_list).post(handle_chat_ask))
+        .route(
+            "/llm-completion",
+            get(handle_llm_completion_list).post(handle_llm_completion_run),
+        )
         .route("/autofill", get(handle_autofill_list))
         .route("/passwords", get(handle_password_list))
         .route("/passwords/for", get(handle_passwords_for))
@@ -489,6 +497,51 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_llm_provider_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.llm_provider_list())
+}
+
+async fn handle_summarize_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.summarize_list())
+}
+
+async fn handle_summarize_run(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<SummarizeRequest>,
+) -> Json<LlmResponseDto> {
+    Json(svc.summarize_run(req))
+}
+
+async fn handle_chat_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.chat_list())
+}
+
+async fn handle_chat_ask(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<ChatAskRequest>,
+) -> Json<LlmResponseDto> {
+    Json(svc.chat_ask(req))
+}
+
+async fn handle_llm_completion_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.llm_completion_list())
+}
+
+async fn handle_llm_completion_run(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<LlmCompletionRequest>,
+) -> Json<LlmResponseDto> {
+    Json(svc.llm_completion_run(req))
 }
 
 async fn handle_autofill_list(

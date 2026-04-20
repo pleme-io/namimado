@@ -27,7 +27,8 @@ use crate::api::{
     JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
     OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
     RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
-    OutlineRequest, RedirectRequest, RoutingResolveResponse, SpaceActivateResponse,
+    ChatAskRequest, LlmCompletionRequest, LlmMessageDto, LlmResponseDto, OutlineRequest,
+    RedirectRequest, RoutingResolveResponse, SpaceActivateResponse, SummarizeRequest,
     UrlCleanRequest, UrlRewriteResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
     StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
@@ -582,6 +583,110 @@ impl NamimadoService {
             suggestions: Vec::new(),
         }
     }
+
+    // ── AI pack ──────────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn llm_provider_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .llm_provider_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn summarize_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .summarize_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn chat_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .chat_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn llm_completion_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .llm_completion_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn summarize_run(&self, req: SummarizeRequest) -> LlmResponseDto {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let engine = inner.pipeline.llm_engine_name().to_owned();
+        match inner.pipeline.summarize_run(&req.profile, &req.source) {
+            Ok(r) => pack_llm_response(r, engine),
+            Err(e) => pack_llm_error(e, engine),
+        }
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn chat_ask(&self, req: ChatAskRequest) -> LlmResponseDto {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let engine = inner.pipeline.llm_engine_name().to_owned();
+        let history: Vec<nami_core::llm::LlmMessage> = req
+            .history
+            .iter()
+            .map(|m| nami_core::llm::LlmMessage {
+                role: m.role.clone(),
+                content: m.content.clone(),
+            })
+            .collect();
+        match inner.pipeline.chat_ask(
+            &req.profile,
+            req.page_context.as_deref(),
+            &history,
+            &req.question,
+        ) {
+            Ok(r) => pack_llm_response(r, engine),
+            Err(e) => pack_llm_error(e, engine),
+        }
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn llm_completion_run(&self, req: LlmCompletionRequest) -> LlmResponseDto {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let engine = inner.pipeline.llm_engine_name().to_owned();
+        match inner.pipeline.llm_completion_run(&req.profile, &req.prefix) {
+            Ok(r) => pack_llm_response(r, engine),
+            Err(e) => pack_llm_error(e, engine),
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn llm_provider_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn summarize_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn chat_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn llm_completion_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn summarize_run(&self, _r: SummarizeRequest) -> LlmResponseDto { disabled_response() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn chat_ask(&self, _r: ChatAskRequest) -> LlmResponseDto { disabled_response() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn llm_completion_run(&self, _r: LlmCompletionRequest) -> LlmResponseDto { disabled_response() }
 
     // ── Credentials pack ─────────────────────────────────────────
 
@@ -1889,6 +1994,53 @@ impl Default for NamimadoService {
     }
 }
 
+#[cfg(feature = "browser-core")]
+fn pack_llm_response(r: nami_core::llm::LlmResponse, engine: String) -> LlmResponseDto {
+    LlmResponseDto {
+        outcome: "ok".into(),
+        content: Some(r.content),
+        input_tokens: r.input_tokens,
+        output_tokens: r.output_tokens,
+        model: Some(r.model),
+        stopped: Some(match r.stopped {
+            nami_core::llm::StopReason::EndTurn => "end-turn",
+            nami_core::llm::StopReason::StopSequence => "stop-sequence",
+            nami_core::llm::StopReason::MaxTokens => "max-tokens",
+            nami_core::llm::StopReason::Other => "other",
+        }.to_owned()),
+        engine,
+        error: None,
+    }
+}
+
+#[cfg(feature = "browser-core")]
+fn pack_llm_error(e: nami_core::llm::LlmError, engine: String) -> LlmResponseDto {
+    LlmResponseDto {
+        outcome: "error".into(),
+        content: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        model: None,
+        stopped: None,
+        engine,
+        error: Some(e.to_string()),
+    }
+}
+
+#[cfg(not(feature = "browser-core"))]
+fn disabled_response() -> LlmResponseDto {
+    LlmResponseDto {
+        outcome: "error".into(),
+        content: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        model: None,
+        stopped: None,
+        engine: "disabled".into(),
+        error: Some("browser-core feature disabled".into()),
+    }
+}
+
 fn compile_features() -> Vec<String> {
     let mut out = Vec::new();
     if cfg!(feature = "browser-core") {
@@ -2260,6 +2412,26 @@ mod tests {
             origin: None,
         };
         let r = svc.js_eval(req);
+        assert_eq!(r.outcome, "error");
+        assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn ai_pack_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        assert!(svc.llm_provider_list().is_empty());
+        assert!(svc.summarize_list().is_empty());
+        assert!(svc.chat_list().is_empty());
+        assert!(svc.llm_completion_list().is_empty());
+    }
+
+    #[test]
+    fn ai_calls_report_error_when_profile_missing() {
+        let svc = NamimadoService::new();
+        let r = svc.summarize_run(SummarizeRequest {
+            profile: "nope".into(),
+            source: "hi".into(),
+        });
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
     }

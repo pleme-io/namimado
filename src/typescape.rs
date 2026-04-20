@@ -246,6 +246,13 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/secure-notes", "Every (defsecure-note) non-password-secret profile."),
         mk("GET", "/passkeys", "Every (defpasskey) WebAuthn profile."),
         mk("GET", "/passkeys/for", "Passkey profiles permitting `?rp_id=…`."),
+        mk("GET", "/llm-providers", "Every (defllm-provider) declaration."),
+        mk("GET", "/summarize", "Every (defsummarize) profile."),
+        mk("POST", "/summarize", "Run a summarize profile — body { profile, source }."),
+        mk("GET", "/chat", "Every (defchat-with-page) profile."),
+        mk("POST", "/chat", "Ask a chat profile — body { profile, question, page_context?, history? }."),
+        mk("GET", "/llm-completion", "Every (defllm-completion) profile."),
+        mk("POST", "/llm-completion", "Run a completion profile — body { profile, prefix }."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -346,6 +353,13 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("secure_note_list", "Every (defsecure-note) profile."),
         mk("passkey_list", "Every (defpasskey) WebAuthn profile."),
         mk("passkeys_for", "Passkey profiles permitting an RP ID."),
+        mk("llm_provider_list", "Every (defllm-provider)."),
+        mk("summarize_list", "Every (defsummarize) profile."),
+        mk("summarize_run", "Run a summarize profile."),
+        mk("chat_list", "Every (defchat-with-page) profile."),
+        mk("chat_ask", "Ask a chat profile against page context + history."),
+        mk("llm_completion_list", "Every (defllm-completion) profile."),
+        mk("llm_completion_run", "Run a completion profile against a prefix."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -469,6 +483,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 53, "53 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 57, "57 DSL keywords expected in nami-core");
     }
 }
