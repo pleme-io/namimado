@@ -43,6 +43,10 @@ use nami_core::boost::{BoostRegistry, BoostSpec};
 use nami_core::find::{FindRegistry, FindSpec};
 use nami_core::gesture::{GestureRegistry, GestureSpec};
 use nami_core::i18n::{MessageRegistry, MessageSpec};
+use nami_core::js_runtime::{
+    EvalContext, EvalError, ExecutionResult, JsRuntime, JsRuntimeRegistry, JsRuntimeSpec,
+    MicroEval,
+};
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::pip::{PipRegistry, PipSpec};
 use nami_core::session::{SessionSpec, SessionStore, TabRecord};
@@ -155,6 +159,10 @@ pub struct SubstratePipeline {
     pips: PipRegistry,
     gestures: GestureRegistry,
     boosts: BoostRegistry,
+    js_runtimes: JsRuntimeRegistry,
+    /// Active runtime implementation. MicroEval today; real engines
+    /// drop in behind feature flags via this same trait object.
+    js_engine: Arc<dyn JsRuntime>,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -196,6 +204,7 @@ pub struct SubstratePipeline {
     pip_names: Vec<String>,
     gesture_strokes: Vec<String>,
     boost_names: Vec<String>,
+    js_runtime_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -415,6 +424,23 @@ impl SubstratePipeline {
         let mut boosts = BoostRegistry::new();
         boosts.extend(boost_specs);
 
+        // JS runtime specs — always include a "default" micro-eval
+        // profile so POST /js/eval works out of the box.
+        let js_specs: Vec<JsRuntimeSpec> =
+            nami_core::js_runtime::compile(&ext_src).unwrap_or_default();
+        let js_runtime_names: Vec<String> = if js_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            js_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut js_runtimes = JsRuntimeRegistry::new();
+        if js_specs.is_empty() {
+            js_runtimes.insert(JsRuntimeSpec::default_profile());
+        } else {
+            js_runtimes.extend(js_specs);
+        }
+        let js_engine: Arc<dyn JsRuntime> = Arc::new(MicroEval);
+
         // Session profile — single, default when absent. The actual
         // session store starts empty; persistence is a follow-up.
         let session_specs: Vec<SessionSpec> =
@@ -519,7 +545,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -549,6 +575,7 @@ impl SubstratePipeline {
             pips.len(),
             gestures.len(),
             boosts.len(),
+            js_runtimes.len(),
         );
 
         Self {
@@ -576,6 +603,8 @@ impl SubstratePipeline {
             pips,
             gestures,
             boosts,
+            js_runtimes,
+            js_engine,
             session_store,
             session_spec,
             wasm_agents,
@@ -612,7 +641,45 @@ impl SubstratePipeline {
             pip_names,
             gesture_strokes,
             boost_names,
+            js_runtime_names,
         }
+    }
+
+    /// Names of every declared JsRuntime profile.
+    #[must_use]
+    pub fn js_runtime_names(&self) -> &[String] {
+        &self.js_runtime_names
+    }
+
+    /// Resolve a runtime profile by name, falling back to the first
+    /// installed spec. Returns `None` only when the registry is empty
+    /// (which doesn't happen in practice — a default always loads).
+    #[must_use]
+    pub fn js_runtime_profile(&self, name: Option<&str>) -> Option<JsRuntimeSpec> {
+        name.and_then(|n| self.js_runtimes.get(n))
+            .or_else(|| self.js_runtimes.specs().first())
+            .cloned()
+    }
+
+    /// Run the active engine under a named profile. Caller's `vars`
+    /// passthrough lets boost scripts read host-provided values.
+    pub fn js_eval(
+        &self,
+        source: &str,
+        profile: Option<&str>,
+        vars: HashMap<String, nami_core::js_runtime::Value>,
+        origin: Option<String>,
+    ) -> Result<ExecutionResult, EvalError> {
+        let spec = self
+            .js_runtime_profile(profile)
+            .ok_or_else(|| EvalError::Runtime("no JS runtime installed".into()))?;
+        let ctx = EvalContext { vars, origin };
+        self.js_engine.eval(source, &spec, &ctx)
+    }
+
+    #[must_use]
+    pub fn js_engine_name(&self) -> &'static str {
+        self.js_engine.engine_name()
     }
 
     // ── Tier-1 accessor surface ───────────────────────────────────
@@ -1065,6 +1132,7 @@ impl SubstratePipeline {
             pips: self.pip_names.clone(),
             gestures: self.gesture_strokes.clone(),
             boosts: self.boost_names.clone(),
+            js_runtimes: self.js_runtime_names.clone(),
         }
     }
 

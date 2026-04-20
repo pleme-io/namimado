@@ -109,6 +109,15 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct JsEvalToolRequest {
+    source: String,
+    profile: Option<String>,
+    /// Optional JSON object of `{ident: primitive}` bindings.
+    vars: Option<serde_json::Value>,
+    origin: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct FindToolRequest {
     query: String,
     profile: Option<String>,
@@ -727,6 +736,30 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(
+        description = "Run JavaScript-ish source through the active (defjs-runtime) \
+                       engine. MicroEval ships as today's backend — arithmetic, \
+                       string concat, identifier lookup, JS-shape type coercion. \
+                       Real engine (Boa / rquickjs) plugs into the same JsRuntime \
+                       trait behind a feature flag. Honors fuel + memory + \
+                       capability gates from the named profile. Same as POST /js/eval."
+    )]
+    async fn js_eval(
+        &self,
+        Parameters(req): Parameters<JsEvalToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::JsEvalRequest {
+            source: req.source,
+            profile: req.profile,
+            vars: req.vars.unwrap_or(serde_json::Value::Null),
+            origin: req.origin,
+        };
+        let resp = self.service.js_eval(api_req);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
     }
 
     #[tool(

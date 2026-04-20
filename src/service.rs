@@ -24,10 +24,11 @@ use crate::api::{
     DispatchKeyRequest, DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse,
     ExtensionSummary, ExtensionToggleRequest, FindMatchInfo, FindRequest, FindResponse,
     GestureDispatchRequest, GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse,
-    NavigateRequest, NavigateResponse, OmniboxResponse, OmniboxSuggestion, PipResponse,
-    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
-    SessionTabInfo, SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry,
-    StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
+    JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
+    OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
+    RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
+    StateCellValue, StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
+    TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -578,6 +579,81 @@ impl NamimadoService {
             query: query.to_owned(),
             profile: profile.unwrap_or("default").to_owned(),
             suggestions: Vec::new(),
+        }
+    }
+
+    /// POST /js/eval — run script through the active JsRuntime.
+    #[cfg(feature = "browser-core")]
+    pub fn js_eval(&self, req: JsEvalRequest) -> JsEvalResponse {
+        use nami_core::js_runtime::Value as JsValue;
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let engine = inner.pipeline.js_engine_name().to_owned();
+
+        // Pack caller-provided JSON vars into the runtime's Value type.
+        // We accept only top-level primitives + strings + numbers +
+        // bools — MicroEval doesn't walk objects.
+        let vars = match &req.vars {
+            serde_json::Value::Object(map) => map
+                .iter()
+                .filter_map(|(k, v)| {
+                    let converted = match v {
+                        serde_json::Value::Null => Some(JsValue::Null),
+                        serde_json::Value::Bool(b) => Some(JsValue::Bool(*b)),
+                        serde_json::Value::Number(n) => n.as_f64().map(JsValue::Number),
+                        serde_json::Value::String(s) => Some(JsValue::String(s.clone())),
+                        _ => None,
+                    };
+                    converted.map(|v| (k.clone(), v))
+                })
+                .collect(),
+            _ => std::collections::HashMap::new(),
+        };
+
+        match inner.pipeline.js_eval(&req.source, req.profile.as_deref(), vars, req.origin) {
+            Ok(r) => JsEvalResponse {
+                outcome: "ok".into(),
+                value: Some(serde_json::to_value(&r.value).unwrap_or_default()),
+                fuel_used: r.fuel_used,
+                memory_peak: r.memory_peak,
+                logs: r.logs,
+                engine,
+                error: None,
+                error_kind: None,
+            },
+            Err(e) => {
+                let kind = match &e {
+                    nami_core::js_runtime::EvalError::Parse(_) => "parse",
+                    nami_core::js_runtime::EvalError::OutOfFuel { .. } => "out-of-fuel",
+                    nami_core::js_runtime::EvalError::OutOfMemory { .. } => "out-of-memory",
+                    nami_core::js_runtime::EvalError::PermissionDenied(_) => "permission-denied",
+                    nami_core::js_runtime::EvalError::Runtime(_) => "runtime",
+                    nami_core::js_runtime::EvalError::Unsupported(_) => "unsupported",
+                };
+                JsEvalResponse {
+                    outcome: "error".into(),
+                    value: None,
+                    fuel_used: 0,
+                    memory_peak: 0,
+                    logs: vec![],
+                    engine,
+                    error: Some(e.to_string()),
+                    error_kind: Some(kind.to_owned()),
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn js_eval(&self, _req: JsEvalRequest) -> JsEvalResponse {
+        JsEvalResponse {
+            outcome: "error".into(),
+            value: None,
+            fuel_used: 0,
+            memory_peak: 0,
+            logs: vec![],
+            engine: "disabled".into(),
+            error: Some("browser-core feature disabled".into()),
+            error_kind: Some("unsupported".into()),
         }
     }
 
@@ -1522,6 +1598,49 @@ mod tests {
         let undone = svc.session_undo_close().unwrap();
         assert_eq!(undone.url, "https://example.com/");
         assert!(svc.session_closed().is_empty());
+    }
+
+    #[test]
+    fn js_eval_microeval_arithmetic_roundtrips() {
+        let svc = NamimadoService::new();
+        let req = JsEvalRequest {
+            source: "1 + 2 * 3".into(),
+            profile: None,
+            vars: serde_json::Value::Null,
+            origin: None,
+        };
+        let r = svc.js_eval(req);
+        assert_eq!(r.outcome, "ok");
+        assert_eq!(r.value, Some(serde_json::json!(7.0)));
+        assert_eq!(r.engine, "micro-eval");
+    }
+
+    #[test]
+    fn js_eval_reports_error_on_bad_input() {
+        let svc = NamimadoService::new();
+        let req = JsEvalRequest {
+            source: "let x = 1;".into(),
+            profile: None,
+            vars: serde_json::Value::Null,
+            origin: None,
+        };
+        let r = svc.js_eval(req);
+        assert_eq!(r.outcome, "error");
+        assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn js_eval_passes_vars_through_context() {
+        let svc = NamimadoService::new();
+        let req = JsEvalRequest {
+            source: r#""hi " + name"#.into(),
+            profile: None,
+            vars: serde_json::json!({"name": "world"}),
+            origin: None,
+        };
+        let r = svc.js_eval(req);
+        assert_eq!(r.outcome, "ok");
+        assert_eq!(r.value, Some(serde_json::json!("hi world")));
     }
 
     #[test]

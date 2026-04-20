@@ -211,6 +211,7 @@ pub struct RulesInventory {
     pub pips: Vec<String>,
     pub gestures: Vec<String>,
     pub boosts: Vec<String>,
+    pub js_runtimes: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -276,6 +277,35 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// POST /js/eval — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct JsEvalRequest {
+    pub source: String,
+    /// Named (defjs-runtime) profile. None → first installed.
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// Identifier → JSON-serializable primitive. Read-only in the
+    /// script — MicroEval and the planned real engines can coerce.
+    #[serde(default)]
+    pub vars: serde_json::Value,
+    /// Origin URL for fetch gating.
+    #[serde(default)]
+    pub origin: Option<String>,
+}
+
+/// POST /js/eval — response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct JsEvalResponse {
+    pub outcome: String, // "ok" | "error"
+    pub value: Option<serde_json::Value>,
+    pub fuel_used: u64,
+    pub memory_peak: u64,
+    pub logs: Vec<String>,
+    pub engine: String,
+    pub error: Option<String>,
+    pub error_kind: Option<String>,
 }
 
 /// POST /find — input.

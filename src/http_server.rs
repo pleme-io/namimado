@@ -19,11 +19,12 @@ use crate::api::{
     AddBookmarkRequest, ApiError, BookmarkInfo, BoostInfo, BoostToggleRequest, CommandInfo,
     DispatchKeyRequest, DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse,
     ExtensionSummary, ExtensionToggleRequest, FindRequest, FindResponse, GestureDispatchRequest,
-    GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest,
-    NavigateResponse, OmniboxResponse, PipResponse, ReaderResponse, ReloadResponse,
-    ReportResponse, RulesInventory, SecurityPolicyResponse, SessionTabInfo,
-    SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary,
-    StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
+    GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, JsEvalRequest,
+    JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse, PipResponse,
+    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
+    SessionTabInfo, SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry,
+    StorageIndexSummary, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
+    VerifyExtensionResponse, ZoomResponse,
 };
 use crate::service::NamimadoService;
 
@@ -68,6 +69,7 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/js/eval", post(handle_js_eval))
         .route("/find", post(handle_find))
         .route("/zoom", get(handle_zoom))
         .route("/snapshot/recipe", get(handle_snapshot_recipe))
@@ -449,6 +451,13 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_js_eval(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<JsEvalRequest>,
+) -> Json<JsEvalResponse> {
+    Json(svc.js_eval(req))
 }
 
 async fn handle_find(
