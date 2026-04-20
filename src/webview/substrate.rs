@@ -71,6 +71,8 @@ use nami_core::sync_channel::{SyncRegistry, SyncSpec};
 use nami_core::tab_group::{TabGroupRegistry, TabGroupSpec};
 use nami_core::tab_hibernate::{TabHibernateRegistry, TabHibernateSpec};
 use nami_core::tab_preview::{TabPreviewRegistry, TabPreviewSpec};
+use nami_core::search_engine::{SearchEngineRegistry, SearchEngineSpec};
+use nami_core::search_bang::{SearchBangRegistry, SearchBangSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -253,6 +255,8 @@ pub struct SubstratePipeline {
     tab_groups: TabGroupRegistry,
     tab_hibernates: TabHibernateRegistry,
     tab_previews: TabPreviewRegistry,
+    search_engines: SearchEngineRegistry,
+    search_bangs: SearchBangRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -338,6 +342,8 @@ pub struct SubstratePipeline {
     tab_group_names: Vec<String>,
     tab_hibernate_names: Vec<String>,
     tab_preview_names: Vec<String>,
+    search_engine_names: Vec<String>,
+    search_bang_triggers: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -756,6 +762,35 @@ impl SubstratePipeline {
             tab_previews.extend(tab_preview_specs);
         }
 
+        // Search pack — omnibox engines + !bangs.
+        let search_engine_specs: Vec<SearchEngineSpec> =
+            nami_core::search_engine::compile(&ext_src).unwrap_or_default();
+        let search_engine_names: Vec<String> = if search_engine_specs.is_empty() {
+            vec!["ddg".to_owned()]
+        } else {
+            search_engine_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut search_engines = SearchEngineRegistry::new();
+        if search_engine_specs.is_empty() {
+            search_engines.insert(SearchEngineSpec::default_profile());
+        } else {
+            search_engines.extend(search_engine_specs);
+        }
+
+        let search_bang_specs: Vec<SearchBangSpec> =
+            nami_core::search_bang::compile(&ext_src).unwrap_or_default();
+        let search_bang_triggers: Vec<String> = if search_bang_specs.is_empty() {
+            vec!["g".to_owned()]
+        } else {
+            search_bang_specs.iter().map(|s| s.trigger.clone()).collect()
+        };
+        let mut search_bangs = SearchBangRegistry::new();
+        if search_bang_specs.is_empty() {
+            search_bangs.insert(SearchBangSpec::default_profile());
+        } else {
+            search_bangs.extend(search_bang_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1098,7 +1133,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1172,6 +1207,8 @@ impl SubstratePipeline {
             tab_groups.len(),
             tab_hibernates.len(),
             tab_previews.len(),
+            search_engines.len(),
+            search_bangs.len(),
         );
 
         Self {
@@ -1246,6 +1283,8 @@ impl SubstratePipeline {
             tab_groups,
             tab_hibernates,
             tab_previews,
+            search_engines,
+            search_bangs,
             session_store,
             session_spec,
             wasm_agents,
@@ -1326,6 +1365,8 @@ impl SubstratePipeline {
             tab_group_names,
             tab_hibernate_names,
             tab_preview_names,
+            search_engine_names,
+            search_bang_triggers,
         }
     }
 
@@ -1452,6 +1493,40 @@ impl SubstratePipeline {
     #[must_use]
     pub fn tab_preview_for(&self, host: &str) -> Option<TabPreviewSpec> {
         self.tab_previews.resolve(host).cloned()
+    }
+
+    // ── Search pack ──────────────────────────────────────────────
+
+    #[must_use]
+    pub fn search_engine_list(&self) -> Vec<SearchEngineSpec> {
+        self.search_engines.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn search_engine_get(&self, name: &str) -> Option<SearchEngineSpec> {
+        self.search_engines.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn search_engine_by_keyword(&self, keyword: &str) -> Option<SearchEngineSpec> {
+        self.search_engines.by_keyword(keyword).cloned()
+    }
+
+    #[must_use]
+    pub fn search_engine_default(&self) -> Option<SearchEngineSpec> {
+        self.search_engines.default_engine().cloned()
+    }
+
+    #[must_use]
+    pub fn search_bang_list(&self) -> Vec<SearchBangSpec> {
+        self.search_bangs.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn search_bang_detect(&self, input: &str) -> Option<(SearchBangSpec, String)> {
+        self.search_bangs
+            .detect(input)
+            .map(|m| (m.spec.clone(), m.remaining.to_owned()))
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2439,6 +2514,8 @@ impl SubstratePipeline {
             tab_groups: self.tab_group_names.clone(),
             tab_hibernates: self.tab_hibernate_names.clone(),
             tab_previews: self.tab_preview_names.clone(),
+            search_engines: self.search_engine_names.clone(),
+            search_bangs: self.search_bang_triggers.clone(),
         }
     }
 

@@ -101,6 +101,15 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/tab-hibernate/resolve", get(handle_tab_hibernate_for))
         .route("/tab-preview", get(handle_tab_preview_list))
         .route("/tab-preview/resolve", get(handle_tab_preview_for))
+        .route("/search-engine", get(handle_search_engine_list))
+        .route("/search-engine/default", get(handle_search_engine_default))
+        .route("/search-engine/:name", get(handle_search_engine_get))
+        .route(
+            "/search-engine/by-keyword/:keyword",
+            get(handle_search_engine_by_keyword),
+        )
+        .route("/search-bang", get(handle_search_bang_list))
+        .route("/search-bang/detect", get(handle_search_bang_detect))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -759,6 +768,72 @@ async fn handle_tab_preview_for(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_tab_preview_matches"),
+            )
+        })
+}
+
+async fn handle_search_engine_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.search_engine_list())
+}
+
+async fn handle_search_engine_default(
+    State(svc): State<NamimadoService>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.search_engine_default().map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_search_engine_default"),
+        )
+    })
+}
+
+async fn handle_search_engine_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.search_engine_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("search_engine_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_search_engine_by_keyword(
+    State(svc): State<NamimadoService>,
+    Path(keyword): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.search_engine_by_keyword(&keyword).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_search_engine_for_keyword").with_detail(keyword),
+        )
+    })
+}
+
+async fn handle_search_bang_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.search_bang_list())
+}
+
+#[derive(Debug, Deserialize)]
+struct BangDetectQuery {
+    input: Option<String>,
+}
+
+async fn handle_search_bang_detect(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<BangDetectQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.search_bang_detect(&q.input.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_search_bang_matches"),
             )
         })
 }

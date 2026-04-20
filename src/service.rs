@@ -879,6 +879,83 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn tab_preview_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Search pack ──────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn search_engine_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .search_engine_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn search_engine_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .search_engine_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn search_engine_by_keyword(&self, keyword: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .search_engine_by_keyword(keyword)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn search_engine_default(&self) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .search_engine_default()
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn search_bang_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .search_bang_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    /// Returns `{spec: SearchBangSpec, remaining: String}` when a
+    /// bang matches the omnibox input, else None.
+    #[cfg(feature = "browser-core")]
+    pub fn search_bang_detect(&self, input: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.search_bang_detect(input).map(|(spec, rest)| {
+            serde_json::json!({
+                "spec": spec,
+                "remaining": rest,
+            })
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_engine_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_engine_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_engine_by_keyword(&self, _k: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_engine_default(&self) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_bang_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn search_bang_detect(&self, _i: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2924,6 +3001,18 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn search_pack_auto_registers_defaults() {
+        let svc = NamimadoService::new();
+        assert!(!svc.search_engine_list().is_empty());
+        assert!(svc.search_engine_default().is_some());
+        assert!(svc.search_engine_by_keyword("d").is_some());
+        assert!(!svc.search_bang_list().is_empty());
+        let hit = svc.search_bang_detect("!g rust async").unwrap();
+        assert_eq!(hit["remaining"].as_str(), Some("rust async"));
+        assert!(svc.search_bang_detect("rust async").is_none());
     }
 
     #[test]

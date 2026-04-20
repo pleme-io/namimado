@@ -288,6 +288,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/tab-hibernate/resolve", "Tab-hibernate profile for `?host=…`."),
         mk("GET", "/tab-preview", "Every (deftab-preview) profile."),
         mk("GET", "/tab-preview/resolve", "Tab-preview profile for `?host=…`."),
+        mk("GET", "/search-engine", "Every (defsearch-engine) profile."),
+        mk("GET", "/search-engine/default", "The current default search engine."),
+        mk("GET", "/search-engine/:name", "Full SearchEngineSpec for one profile by name."),
+        mk("GET", "/search-engine/by-keyword/:keyword", "Search engine for an omnibox keyword."),
+        mk("GET", "/search-bang", "Every (defsearch-bang) shortcut."),
+        mk("GET", "/search-bang/detect", "Detect a !bang in `?input=…`; returns {spec, remaining}."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -430,6 +436,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("tab_hibernate_for", "Tab-hibernate profile for a host."),
         mk("tab_preview_list", "Every (deftab-preview) profile."),
         mk("tab_preview_for", "Tab-preview profile for a host."),
+        mk("search_engine_list", "Every (defsearch-engine) profile."),
+        mk("search_engine_get", "Full SearchEngineSpec for one profile by name."),
+        mk("search_engine_by_keyword", "Search engine for an omnibox keyword shortcut."),
+        mk("search_engine_default", "The current default search engine."),
+        mk("search_bang_list", "Every (defsearch-bang) shortcut."),
+        mk("search_bang_detect", "Detect a !bang in input; returns {spec, remaining}."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -553,6 +565,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 74, "74 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 76, "76 DSL keywords expected in nami-core");
     }
 }

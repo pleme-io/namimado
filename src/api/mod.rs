@@ -255,6 +255,8 @@ pub struct RulesInventory {
     pub tab_groups: Vec<String>,
     pub tab_hibernates: Vec<String>,
     pub tab_previews: Vec<String>,
+    pub search_engines: Vec<String>,
+    pub search_bangs: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

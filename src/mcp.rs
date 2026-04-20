@@ -189,6 +189,18 @@ struct HostOnlyRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct SearchKeywordRequest {
+    /// Omnibox keyword shortcut (no leading `!`). e.g. `"k"`.
+    keyword: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct BangDetectRequest {
+    /// Raw omnibox text. The service strips a matching !bang token.
+    input: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SyncSignalRequest {
     /// One of: bookmarks, history, tabs, open-windows, passwords,
     /// passkeys, sessions, extensions, settings, reading-list,
@@ -1015,6 +1027,64 @@ impl NamimadoMcpServer {
         match self.service.tab_preview_for(&req.host) {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_tab_preview_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defsearch-engine) profile.")]
+    async fn search_engine_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.search_engine_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SearchEngineSpec for one profile by name.")]
+    async fn search_engine_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.search_engine_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "search_engine_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Search engine for an omnibox keyword shortcut (e.g. 'k' for Kagi).")]
+    async fn search_engine_by_keyword(
+        &self,
+        Parameters(req): Parameters<SearchKeywordRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.search_engine_by_keyword(&req.keyword) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_search_engine_for_keyword")),
+        }
+    }
+
+    #[tool(description = "The current default search engine.")]
+    async fn search_engine_default(&self) -> Result<CallToolResult, McpError> {
+        match self.service.search_engine_default() {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_search_engine_default")),
+        }
+    }
+
+    #[tool(description = "List every (defsearch-bang) shortcut.")]
+    async fn search_bang_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.search_bang_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Detect a !bang in omnibox input; returns {spec, remaining} on match.")]
+    async fn search_bang_detect(
+        &self,
+        Parameters(req): Parameters<BangDetectRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.search_bang_detect(&req.input) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_search_bang_matches")),
         }
     }
 
