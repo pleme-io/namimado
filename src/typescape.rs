@@ -282,6 +282,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/sync", "Every (defsync) channel."),
         mk("GET", "/sync/:name", "Full SyncSpec for one (defsync) channel by name."),
         mk("GET", "/sync/by-signal/:signal", "Every (defsync) channel syncing a given signal kind."),
+        mk("GET", "/tab-group", "Every (deftab-group) profile."),
+        mk("GET", "/tab-group/resolve", "Tab-group profile for `?host=…`."),
+        mk("GET", "/tab-hibernate", "Every (deftab-hibernate) profile."),
+        mk("GET", "/tab-hibernate/resolve", "Tab-hibernate profile for `?host=…`."),
+        mk("GET", "/tab-preview", "Every (deftab-preview) profile."),
+        mk("GET", "/tab-preview/resolve", "Tab-preview profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -418,6 +424,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("sync_list", "Every (defsync) channel."),
         mk("sync_get", "Full SyncSpec for one (defsync) channel by name."),
         mk("sync_for_signal", "Every (defsync) channel syncing a given signal kind."),
+        mk("tab_group_list", "Every (deftab-group) profile."),
+        mk("tab_group_for", "Tab-group profile for a host."),
+        mk("tab_hibernate_list", "Every (deftab-hibernate) profile."),
+        mk("tab_hibernate_for", "Tab-hibernate profile for a host."),
+        mk("tab_preview_list", "Every (deftab-preview) profile."),
+        mk("tab_preview_for", "Tab-preview profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -541,6 +553,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 71, "71 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 74, "74 DSL keywords expected in nami-core");
     }
 }

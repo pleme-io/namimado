@@ -95,6 +95,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/sync", get(handle_sync_list))
         .route("/sync/:name", get(handle_sync_get))
         .route("/sync/by-signal/:signal", get(handle_sync_for_signal))
+        .route("/tab-group", get(handle_tab_group_list))
+        .route("/tab-group/resolve", get(handle_tab_group_for))
+        .route("/tab-hibernate", get(handle_tab_hibernate_list))
+        .route("/tab-hibernate/resolve", get(handle_tab_hibernate_for))
+        .route("/tab-preview", get(handle_tab_preview_list))
+        .route("/tab-preview/resolve", get(handle_tab_preview_for))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -695,6 +701,66 @@ async fn handle_sync_for_signal(
     Path(signal): Path<String>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.sync_for_signal(&signal))
+}
+
+async fn handle_tab_group_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_group_list())
+}
+
+async fn handle_tab_group_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.tab_group_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_tab_group_matches"),
+            )
+        })
+}
+
+async fn handle_tab_hibernate_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_hibernate_list())
+}
+
+async fn handle_tab_hibernate_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.tab_hibernate_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_tab_hibernate_matches"),
+            )
+        })
+}
+
+async fn handle_tab_preview_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_preview_list())
+}
+
+async fn handle_tab_preview_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.tab_preview_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_tab_preview_matches"),
+            )
+        })
 }
 
 async fn handle_inspector_list(

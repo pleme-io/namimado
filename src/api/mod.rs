@@ -252,6 +252,9 @@ pub struct RulesInventory {
     pub multiplayer_cursors: Vec<String>,
     pub service_workers: Vec<String>,
     pub syncs: Vec<String>,
+    pub tab_groups: Vec<String>,
+    pub tab_hibernates: Vec<String>,
+    pub tab_previews: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

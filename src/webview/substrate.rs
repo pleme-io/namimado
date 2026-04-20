@@ -68,6 +68,9 @@ use nami_core::multiplayer_cursor::{MultiplayerCursorRegistry, MultiplayerCursor
 use nami_core::presence::{PresenceRegistry, PresenceSpec};
 use nami_core::service_worker::{ServiceWorkerRegistry, ServiceWorkerSpec};
 use nami_core::sync_channel::{SyncRegistry, SyncSpec};
+use nami_core::tab_group::{TabGroupRegistry, TabGroupSpec};
+use nami_core::tab_hibernate::{TabHibernateRegistry, TabHibernateSpec};
+use nami_core::tab_preview::{TabPreviewRegistry, TabPreviewSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -247,6 +250,9 @@ pub struct SubstratePipeline {
     multiplayer_cursors: MultiplayerCursorRegistry,
     service_workers: ServiceWorkerRegistry,
     syncs: SyncRegistry,
+    tab_groups: TabGroupRegistry,
+    tab_hibernates: TabHibernateRegistry,
+    tab_previews: TabPreviewRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -329,6 +335,9 @@ pub struct SubstratePipeline {
     multiplayer_cursor_names: Vec<String>,
     service_worker_names: Vec<String>,
     sync_names: Vec<String>,
+    tab_group_names: Vec<String>,
+    tab_hibernate_names: Vec<String>,
+    tab_preview_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -704,6 +713,49 @@ impl SubstratePipeline {
             syncs.extend(sync_specs);
         }
 
+        // Tabs pack — groups, hibernation, hover previews.
+        let tab_group_specs: Vec<TabGroupSpec> =
+            nami_core::tab_group::compile(&ext_src).unwrap_or_default();
+        let tab_group_names: Vec<String> = if tab_group_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            tab_group_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut tab_groups = TabGroupRegistry::new();
+        if tab_group_specs.is_empty() {
+            tab_groups.insert(TabGroupSpec::default_profile());
+        } else {
+            tab_groups.extend(tab_group_specs);
+        }
+
+        let tab_hibernate_specs: Vec<TabHibernateSpec> =
+            nami_core::tab_hibernate::compile(&ext_src).unwrap_or_default();
+        let tab_hibernate_names: Vec<String> = if tab_hibernate_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            tab_hibernate_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut tab_hibernates = TabHibernateRegistry::new();
+        if tab_hibernate_specs.is_empty() {
+            tab_hibernates.insert(TabHibernateSpec::default_profile());
+        } else {
+            tab_hibernates.extend(tab_hibernate_specs);
+        }
+
+        let tab_preview_specs: Vec<TabPreviewSpec> =
+            nami_core::tab_preview::compile(&ext_src).unwrap_or_default();
+        let tab_preview_names: Vec<String> = if tab_preview_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            tab_preview_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut tab_previews = TabPreviewRegistry::new();
+        if tab_preview_specs.is_empty() {
+            tab_previews.insert(TabPreviewSpec::default_profile());
+        } else {
+            tab_previews.extend(tab_preview_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1046,7 +1098,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1117,6 +1169,9 @@ impl SubstratePipeline {
             multiplayer_cursors.len(),
             service_workers.len(),
             syncs.len(),
+            tab_groups.len(),
+            tab_hibernates.len(),
+            tab_previews.len(),
         );
 
         Self {
@@ -1188,6 +1243,9 @@ impl SubstratePipeline {
             multiplayer_cursors,
             service_workers,
             syncs,
+            tab_groups,
+            tab_hibernates,
+            tab_previews,
             session_store,
             session_spec,
             wasm_agents,
@@ -1265,6 +1323,9 @@ impl SubstratePipeline {
             multiplayer_cursor_names,
             service_worker_names,
             sync_names,
+            tab_group_names,
+            tab_hibernate_names,
+            tab_preview_names,
         }
     }
 
@@ -1359,6 +1420,38 @@ impl SubstratePipeline {
     #[must_use]
     pub fn sync_for_signal(&self, signal: nami_core::sync_channel::SyncSignal) -> Vec<SyncSpec> {
         self.syncs.for_signal(signal).into_iter().cloned().collect()
+    }
+
+    // ── Tabs pack ────────────────────────────────────────────────
+
+    #[must_use]
+    pub fn tab_group_list(&self) -> Vec<TabGroupSpec> {
+        self.tab_groups.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn tab_group_for(&self, host: &str) -> Option<TabGroupSpec> {
+        self.tab_groups.group_for_host(host).cloned()
+    }
+
+    #[must_use]
+    pub fn tab_hibernate_list(&self) -> Vec<TabHibernateSpec> {
+        self.tab_hibernates.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn tab_hibernate_for(&self, host: &str) -> Option<TabHibernateSpec> {
+        self.tab_hibernates.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn tab_preview_list(&self) -> Vec<TabPreviewSpec> {
+        self.tab_previews.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn tab_preview_for(&self, host: &str) -> Option<TabPreviewSpec> {
+        self.tab_previews.resolve(host).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2343,6 +2436,9 @@ impl SubstratePipeline {
             multiplayer_cursors: self.multiplayer_cursor_names.clone(),
             service_workers: self.service_worker_names.clone(),
             syncs: self.sync_names.clone(),
+            tab_groups: self.tab_group_names.clone(),
+            tab_hibernates: self.tab_hibernate_names.clone(),
+            tab_previews: self.tab_preview_names.clone(),
         }
     }
 

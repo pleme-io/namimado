@@ -964,6 +964,60 @@ impl NamimadoMcpServer {
         ))
     }
 
+    #[tool(description = "List every (deftab-group) profile.")]
+    async fn tab_group_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.tab_group_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved tab-group profile for a host.")]
+    async fn tab_group_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.tab_group_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_tab_group_matches")),
+        }
+    }
+
+    #[tool(description = "List every (deftab-hibernate) profile.")]
+    async fn tab_hibernate_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.tab_hibernate_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved tab-hibernate profile for a host.")]
+    async fn tab_hibernate_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.tab_hibernate_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_tab_hibernate_matches")),
+        }
+    }
+
+    #[tool(description = "List every (deftab-preview) profile.")]
+    async fn tab_preview_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.tab_preview_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved tab-preview profile for a host.")]
+    async fn tab_preview_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.tab_preview_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_tab_preview_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
