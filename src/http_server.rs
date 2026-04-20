@@ -22,7 +22,8 @@ use crate::api::{
     GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, JsEvalRequest,
     JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse, PipResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
-    RoutingResolveResponse, SessionTabInfo, SnapshotRecipeResponse, SpaceActivateResponse,
+    OutlineRequest, RedirectRequest, RoutingResolveResponse, SessionTabInfo,
+    UrlCleanRequest, UrlRewriteResponse, SnapshotRecipeResponse, SpaceActivateResponse,
     SpaceActiveResponse,
     StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest,
     StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
@@ -70,6 +71,15 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/outline", post(handle_outline))
+        .route("/annotate", get(handle_annotate_list))
+        .route("/feeds", get(handle_feed_list))
+        .route("/redirect", get(handle_redirect_list).post(handle_redirect_apply))
+        .route("/url-clean", get(handle_url_clean_list).post(handle_url_clean_apply))
+        .route("/script-policy", get(handle_script_policy_list))
+        .route("/script-policy/resolve", get(handle_script_policy_for))
+        .route("/bridges", get(handle_bridge_list))
+        .route("/bridges/torrc", get(handle_bridges_torrc))
         .route("/spoofs", get(handle_spoofs_list))
         .route("/spoof", get(handle_spoof_for))
         .route("/dns", get(handle_dns_list))
@@ -465,6 +475,91 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_outline(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<OutlineRequest>,
+) -> Result<Json<Vec<serde_json::Value>>, ApiErrorResponse> {
+    svc.outline_extract(req).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_navigate_yet").with_detail("call POST /navigate first"),
+        )
+    })
+}
+
+async fn handle_annotate_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.annotate_list())
+}
+
+async fn handle_feed_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.feed_list())
+}
+
+async fn handle_redirect_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.redirect_list())
+}
+
+async fn handle_redirect_apply(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<RedirectRequest>,
+) -> Json<UrlRewriteResponse> {
+    Json(svc.redirect_apply(req))
+}
+
+async fn handle_url_clean_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.url_clean_list())
+}
+
+async fn handle_url_clean_apply(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<UrlCleanRequest>,
+) -> Json<UrlRewriteResponse> {
+    Json(svc.url_clean_apply(req))
+}
+
+async fn handle_script_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.script_policy_list())
+}
+
+async fn handle_script_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.script_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_policy_matches"),
+            )
+        })
+}
+
+async fn handle_bridge_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.bridge_list())
+}
+
+async fn handle_bridges_torrc(
+    State(svc): State<NamimadoService>,
+) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        svc.bridges_torrc_block(),
+    )
 }
 
 async fn handle_spoofs_list(

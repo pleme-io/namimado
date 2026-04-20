@@ -218,6 +218,13 @@ pub struct RulesInventory {
     pub spoofs: Vec<String>,
     pub dnses: Vec<String>,
     pub routings: Vec<String>,
+    pub outlines: Vec<String>,
+    pub annotates: Vec<String>,
+    pub feeds: Vec<String>,
+    pub redirects: Vec<String>,
+    pub url_cleans: Vec<String>,
+    pub script_policies: Vec<String>,
+    pub bridges: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -283,6 +290,34 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// POST /outline — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OutlineRequest {
+    /// Named (defoutline) profile.
+    #[serde(default)]
+    pub profile: Option<String>,
+}
+
+/// POST /url-clean — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UrlCleanRequest {
+    pub url: String,
+}
+
+/// POST /url-clean + POST /redirect — response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UrlRewriteResponse {
+    pub input: String,
+    pub output: String,
+    pub changed: bool,
+}
+
+/// POST /redirect — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RedirectRequest {
+    pub url: String,
 }
 
 /// GET /routing?host=… — response envelope.

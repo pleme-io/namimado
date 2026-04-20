@@ -109,6 +109,16 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct OutlineToolRequest {
+    profile: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UrlRewriteToolRequest {
+    url: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct DnsNameRequest {
     name: String,
 }
@@ -756,6 +766,111 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(description = "Extract TOC from the last navigated page via (defoutline).")]
+    async fn outline_extract(
+        &self,
+        Parameters(req): Parameters<OutlineToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::OutlineRequest { profile: req.profile };
+        match self.service.outline_extract(api_req) {
+            Some(v) => Ok(ToolResponse::success(
+                &serde_json::to_value(&v).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error("no_navigate_yet")),
+        }
+    }
+
+    #[tool(description = "List every (defannotate) profile.")]
+    async fn annotate_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.annotate_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (deffeed) subscription.")]
+    async fn feed_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.feed_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defredirect) rule.")]
+    async fn redirect_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.redirect_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Rewrite a URL through (defredirect) rules — LibRedirect-\
+                       style frontend substitution. Returns { input, output, \
+                       changed }; pass-through when no rule matches."
+    )]
+    async fn redirect_apply(
+        &self,
+        Parameters(req): Parameters<UrlRewriteToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let r = self
+            .service
+            .redirect_apply(crate::api::RedirectRequest { url: req.url });
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&r).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defurl-clean) rule.")]
+    async fn url_clean_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.url_clean_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Strip tracking parameters from a URL via (defurl-clean) \
+                       rules. Returns { input, output, changed }."
+    )]
+    async fn url_clean_apply(
+        &self,
+        Parameters(req): Parameters<UrlRewriteToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let r = self
+            .service
+            .url_clean_apply(crate::api::UrlCleanRequest { url: req.url });
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&r).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defscript-policy) rule.")]
+    async fn script_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.script_policy_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve (defscript-policy) for a host.")]
+    async fn script_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.script_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_policy_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defbridge) Tor bridge entry.")]
+    async fn bridge_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.bridge_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "torrc `Bridge …` block for every enabled bridge.")]
+    async fn bridges_torrc_block(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::text(&self.service.bridges_torrc_block()))
     }
 
     #[tool(description = "List every (defspoof) — fingerprint-resistance profile.")]

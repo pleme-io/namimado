@@ -27,7 +27,8 @@ use crate::api::{
     JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
     OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
     RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
-    RoutingResolveResponse, SpaceActivateResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
+    OutlineRequest, RedirectRequest, RoutingResolveResponse, SpaceActivateResponse,
+    UrlCleanRequest, UrlRewriteResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
     StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
@@ -580,6 +581,202 @@ impl NamimadoService {
             profile: profile.unwrap_or("default").to_owned(),
             suggestions: Vec::new(),
         }
+    }
+
+    // ── Reading pack ─────────────────────────────────────────────
+
+    /// POST /outline — extract outline from the last-navigated page.
+    #[cfg(feature = "browser-core")]
+    pub fn outline_extract(&self, req: OutlineRequest) -> Option<Vec<serde_json::Value>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let sexp = inner.last_outcome.as_ref()?.dom_sexp.clone();
+        drop(inner);
+        let doc = nami_core::lisp::sexp_to_dom(&sexp).ok()?;
+        let lock = self.inner.lock().expect("service mutex poisoned");
+        let entries = lock.pipeline.outline_extract(&doc, req.profile.as_deref());
+        Some(
+            entries
+                .into_iter()
+                .filter_map(|e| serde_json::to_value(&e).ok())
+                .collect(),
+        )
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn outline_extract(&self, _r: OutlineRequest) -> Option<Vec<serde_json::Value>> {
+        None
+    }
+
+    /// GET /annotate
+    #[cfg(feature = "browser-core")]
+    pub fn annotate_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .annotate_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn annotate_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /feeds
+    #[cfg(feature = "browser-core")]
+    pub fn feed_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .feed_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn feed_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    // ── TOR-v2 pack ──────────────────────────────────────────────
+
+    /// POST /redirect — rewrite a URL through (defredirect) rules.
+    #[cfg(feature = "browser-core")]
+    pub fn redirect_apply(&self, req: RedirectRequest) -> UrlRewriteResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let rewritten = inner.pipeline.redirect_apply(&req.url);
+        let output = rewritten.clone().unwrap_or_else(|| req.url.clone());
+        UrlRewriteResponse {
+            input: req.url.clone(),
+            output: output.clone(),
+            changed: rewritten.is_some() && req.url != output,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn redirect_apply(&self, req: RedirectRequest) -> UrlRewriteResponse {
+        UrlRewriteResponse {
+            input: req.url.clone(),
+            output: req.url,
+            changed: false,
+        }
+    }
+
+    /// GET /redirect — list rules.
+    #[cfg(feature = "browser-core")]
+    pub fn redirect_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .redirect_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn redirect_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// POST /url-clean
+    #[cfg(feature = "browser-core")]
+    pub fn url_clean_apply(&self, req: UrlCleanRequest) -> UrlRewriteResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let cleaned = inner.pipeline.url_clean_apply(&req.url);
+        UrlRewriteResponse {
+            input: req.url.clone(),
+            output: cleaned.clone(),
+            changed: cleaned != req.url,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn url_clean_apply(&self, req: UrlCleanRequest) -> UrlRewriteResponse {
+        UrlRewriteResponse {
+            input: req.url.clone(),
+            output: req.url,
+            changed: false,
+        }
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn url_clean_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .url_clean_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn url_clean_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /script-policy
+    #[cfg(feature = "browser-core")]
+    pub fn script_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .script_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn script_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .script_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn script_policy_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn script_policy_for(&self, _h: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// GET /bridges
+    #[cfg(feature = "browser-core")]
+    pub fn bridge_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .bridge_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    /// GET /bridges/torrc — emit torrc block for every enabled bridge.
+    #[cfg(feature = "browser-core")]
+    pub fn bridges_torrc_block(&self) -> String {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.bridges_torrc_block()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn bridge_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn bridges_torrc_block(&self) -> String {
+        String::new()
     }
 
     // ── Privacy pack ─────────────────────────────────────────────
@@ -1866,6 +2063,48 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn reading_and_tor_packs_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        // Annotate + feed empty.
+        assert!(svc.annotate_list().is_empty());
+        assert!(svc.feed_list().is_empty());
+        // TOR-v2.
+        assert!(svc.redirect_list().is_empty());
+        assert!(svc.url_clean_list().is_empty());
+        assert!(svc.script_policy_list().is_empty());
+        assert!(svc.bridge_list().is_empty());
+        assert!(svc.bridges_torrc_block().is_empty());
+    }
+
+    #[test]
+    fn url_clean_apply_passes_through_when_no_rules() {
+        let svc = NamimadoService::new();
+        let r = svc.url_clean_apply(UrlCleanRequest {
+            url: "https://example.com/x?utm_source=twitter".into(),
+        });
+        assert!(!r.changed);
+        assert_eq!(r.output, r.input);
+    }
+
+    #[test]
+    fn redirect_apply_passes_through_when_no_rules() {
+        let svc = NamimadoService::new();
+        let r = svc.redirect_apply(RedirectRequest {
+            url: "https://youtube.com/watch?v=x".into(),
+        });
+        assert!(!r.changed);
+        assert_eq!(r.output, r.input);
+    }
+
+    #[test]
+    fn outline_returns_none_before_navigate() {
+        let svc = NamimadoService::new();
+        assert!(svc
+            .outline_extract(OutlineRequest { profile: None })
+            .is_none());
     }
 
     #[test]

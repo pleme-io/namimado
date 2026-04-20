@@ -221,6 +221,17 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/dns/:name", "Full DnsSpec for one resolver profile."),
         mk("GET", "/routing", "Every (defrouting) rule."),
         mk("GET", "/routing/resolve", "Resolved routing for `?host=…` (kind + target)."),
+        mk("POST", "/outline", "Extract TOC from last-navigated page via (defoutline)."),
+        mk("GET", "/annotate", "Every (defannotate) profile."),
+        mk("GET", "/feeds", "Every (deffeed) subscription."),
+        mk("GET", "/redirect", "Every (defredirect) rule."),
+        mk("POST", "/redirect", "Rewrite a URL through LibRedirect-style rules."),
+        mk("GET", "/url-clean", "Every (defurl-clean) rule."),
+        mk("POST", "/url-clean", "Strip tracking params from a URL."),
+        mk("GET", "/script-policy", "Every (defscript-policy) rule."),
+        mk("GET", "/script-policy/resolve", "Resolved script policy for `?host=…`."),
+        mk("GET", "/bridges", "Every (defbridge) entry."),
+        mk("GET", "/bridges/torrc", "torrc `Bridge …` config block for every enabled bridge."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -296,6 +307,17 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("dns_get", "Full DnsSpec for one resolver."),
         mk("routing_list", "List all (defrouting) rules."),
         mk("routing_resolve", "Resolved route for a host — kind + target."),
+        mk("outline_extract", "Extract TOC from last-navigated page."),
+        mk("annotate_list", "All (defannotate) profiles."),
+        mk("feed_list", "All (deffeed) subscriptions."),
+        mk("redirect_list", "All (defredirect) rules."),
+        mk("redirect_apply", "Rewrite a URL through LibRedirect-style rules."),
+        mk("url_clean_list", "All (defurl-clean) rules."),
+        mk("url_clean_apply", "Strip tracking params from a URL."),
+        mk("script_policy_list", "All (defscript-policy) rules."),
+        mk("script_policy_for", "Resolved script policy for a host."),
+        mk("bridge_list", "All (defbridge) entries."),
+        mk("bridges_torrc_block", "torrc block for enabled bridges."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -419,6 +441,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 37, "37 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 44, "44 DSL keywords expected in nami-core");
     }
 }

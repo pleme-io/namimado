@@ -50,8 +50,15 @@ use nami_core::js_runtime::{
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::pip::{PipRegistry, PipSpec};
 use nami_core::session::{SessionSpec, SessionStore, TabRecord};
+use nami_core::annotate::{AnnotateRegistry, AnnotateSpec};
+use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
+use nami_core::feed::{FeedRegistry, FeedSpec};
+use nami_core::outline::{OutlineRegistry, OutlineSpec};
+use nami_core::redirect::{RedirectRegistry, RedirectSpec};
 use nami_core::routing::{RouteVia, RoutingRegistry, RoutingSpec};
+use nami_core::script_policy::{ScriptPolicyRegistry, ScriptPolicySpec};
+use nami_core::url_clean::{UrlCleanRegistry, UrlCleanSpec};
 use nami_core::sidebar::{SidebarRegistry, SidebarSpec};
 use nami_core::snapshot::{SnapshotRegistry, SnapshotSpec};
 use nami_core::space::{SpaceRegistry, SpaceSpec, SpaceState};
@@ -176,6 +183,13 @@ pub struct SubstratePipeline {
     spoofs: SpoofRegistry,
     dnses: DnsRegistry,
     routings: RoutingRegistry,
+    outlines: OutlineRegistry,
+    annotates: AnnotateRegistry,
+    feeds: FeedRegistry,
+    redirects: RedirectRegistry,
+    url_cleans: UrlCleanRegistry,
+    script_policies: ScriptPolicyRegistry,
+    bridges: BridgeRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -224,6 +238,13 @@ pub struct SubstratePipeline {
     spoof_names: Vec<String>,
     dns_names: Vec<String>,
     routing_names: Vec<String>,
+    outline_names: Vec<String>,
+    annotate_names: Vec<String>,
+    feed_names: Vec<String>,
+    redirect_names: Vec<String>,
+    url_clean_names: Vec<String>,
+    script_policy_names: Vec<String>,
+    bridge_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -443,6 +464,64 @@ impl SubstratePipeline {
         let mut boosts = BoostRegistry::new();
         boosts.extend(boost_specs);
 
+        // Reading pack.
+        let outline_specs: Vec<OutlineSpec> =
+            nami_core::outline::compile(&ext_src).unwrap_or_default();
+        let outline_names: Vec<String> = if outline_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            outline_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut outlines = OutlineRegistry::new();
+        if outline_specs.is_empty() {
+            outlines.insert(OutlineSpec::default_profile());
+        } else {
+            outlines.extend(outline_specs);
+        }
+
+        let annotate_specs: Vec<AnnotateSpec> =
+            nami_core::annotate::compile(&ext_src).unwrap_or_default();
+        let annotate_names: Vec<String> =
+            annotate_specs.iter().map(|s| s.name.clone()).collect();
+        let mut annotates = AnnotateRegistry::new();
+        annotates.extend(annotate_specs);
+
+        let feed_specs: Vec<FeedSpec> =
+            nami_core::feed::compile(&ext_src).unwrap_or_default();
+        let feed_names: Vec<String> =
+            feed_specs.iter().map(|s| s.name.clone()).collect();
+        let mut feeds = FeedRegistry::new();
+        feeds.extend(feed_specs);
+
+        // TOR-v2 pack.
+        let redirect_specs: Vec<RedirectSpec> =
+            nami_core::redirect::compile(&ext_src).unwrap_or_default();
+        let redirect_names: Vec<String> =
+            redirect_specs.iter().map(|s| s.name.clone()).collect();
+        let mut redirects = RedirectRegistry::new();
+        redirects.extend(redirect_specs);
+
+        let url_clean_specs: Vec<UrlCleanSpec> =
+            nami_core::url_clean::compile(&ext_src).unwrap_or_default();
+        let url_clean_names: Vec<String> =
+            url_clean_specs.iter().map(|s| s.name.clone()).collect();
+        let mut url_cleans = UrlCleanRegistry::new();
+        url_cleans.extend(url_clean_specs);
+
+        let script_policy_specs: Vec<ScriptPolicySpec> =
+            nami_core::script_policy::compile(&ext_src).unwrap_or_default();
+        let script_policy_names: Vec<String> =
+            script_policy_specs.iter().map(|s| s.name.clone()).collect();
+        let mut script_policies = ScriptPolicyRegistry::new();
+        script_policies.extend(script_policy_specs);
+
+        let bridge_specs: Vec<BridgeSpec> =
+            nami_core::bridge::compile(&ext_src).unwrap_or_default();
+        let bridge_names: Vec<String> =
+            bridge_specs.iter().map(|s| s.name.clone()).collect();
+        let mut bridges = BridgeRegistry::new();
+        bridges.extend(bridge_specs);
+
         // Privacy pack — spoof, dns, routing.
         let spoof_specs: Vec<SpoofSpec> =
             nami_core::spoof::compile(&ext_src).unwrap_or_default();
@@ -609,7 +688,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -646,6 +725,13 @@ impl SubstratePipeline {
             spoofs.len(),
             dnses.len(),
             routings.len(),
+            outlines.len(),
+            annotates.len(),
+            feeds.len(),
+            redirects.len(),
+            url_cleans.len(),
+            script_policies.len(),
+            bridges.len(),
         );
 
         Self {
@@ -682,6 +768,13 @@ impl SubstratePipeline {
             spoofs,
             dnses,
             routings,
+            outlines,
+            annotates,
+            feeds,
+            redirects,
+            url_cleans,
+            script_policies,
+            bridges,
             session_store,
             session_spec,
             wasm_agents,
@@ -725,7 +818,103 @@ impl SubstratePipeline {
             spoof_names,
             dns_names,
             routing_names,
+            outline_names,
+            annotate_names,
+            feed_names,
+            redirect_names,
+            url_clean_names,
+            script_policy_names,
+            bridge_names,
         }
+    }
+
+    // ── Reading pack ─────────────────────────────────────────────
+
+    #[must_use]
+    pub fn outline_profile(&self, name: Option<&str>) -> OutlineSpec {
+        name.and_then(|n| self.outlines.get(n))
+            .cloned()
+            .unwrap_or_else(OutlineSpec::default_profile)
+    }
+
+    #[must_use]
+    pub fn outline_extract(
+        &self,
+        doc: &Document,
+        name: Option<&str>,
+    ) -> Vec<nami_core::outline::OutlineEntry> {
+        let spec = self.outline_profile(name);
+        nami_core::outline::extract_outline(doc, &spec)
+    }
+
+    #[must_use]
+    pub fn annotate_list(&self) -> Vec<AnnotateSpec> {
+        self.annotates.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn annotate_get(&self, name: &str) -> Option<AnnotateSpec> {
+        self.annotates.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn feed_list(&self) -> Vec<FeedSpec> {
+        self.feeds.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn feed_get(&self, name: &str) -> Option<FeedSpec> {
+        self.feeds.get(name).cloned()
+    }
+
+    // ── TOR-v2 pack ──────────────────────────────────────────────
+
+    #[must_use]
+    pub fn redirect_list(&self) -> Vec<RedirectSpec> {
+        self.redirects.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn redirect_apply(&self, input_url: &str) -> Option<String> {
+        let parsed = url::Url::parse(input_url).ok()?;
+        let host = parsed.host_str().unwrap_or("");
+        self.redirects.resolve(host)
+            .and_then(|spec| spec.rewrite(input_url, 0))
+    }
+
+    #[must_use]
+    pub fn url_clean_list(&self) -> Vec<UrlCleanSpec> {
+        self.url_cleans.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn url_clean_apply(&self, input_url: &str) -> String {
+        self.url_cleans.apply(input_url)
+    }
+
+    #[must_use]
+    pub fn script_policy_list(&self) -> Vec<ScriptPolicySpec> {
+        self.script_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn script_policy_for(&self, host: &str) -> Option<ScriptPolicySpec> {
+        self.script_policies.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn bridge_list(&self) -> Vec<BridgeSpec> {
+        self.bridges.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn bridge_get(&self, name: &str) -> Option<BridgeSpec> {
+        self.bridges.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn bridges_torrc_block(&self) -> String {
+        self.bridges.to_torrc_block()
     }
 
     // ── Privacy-pack accessors ───────────────────────────────────
@@ -1321,6 +1510,13 @@ impl SubstratePipeline {
             spoofs: self.spoof_names.clone(),
             dnses: self.dns_names.clone(),
             routings: self.routing_names.clone(),
+            outlines: self.outline_names.clone(),
+            annotates: self.annotate_names.clone(),
+            feeds: self.feed_names.clone(),
+            redirects: self.redirect_names.clone(),
+            url_cleans: self.url_clean_names.clone(),
+            script_policies: self.script_policy_names.clone(),
+            bridges: self.bridge_names.clone(),
         }
     }
 
