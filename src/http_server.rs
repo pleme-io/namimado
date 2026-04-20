@@ -71,6 +71,14 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/autofill", get(handle_autofill_list))
+        .route("/passwords", get(handle_password_list))
+        .route("/passwords/for", get(handle_passwords_for))
+        .route("/auth-saver", get(handle_auth_saver_list))
+        .route("/auth-saver/resolve", get(handle_auth_saver_for))
+        .route("/secure-notes", get(handle_secure_note_list))
+        .route("/passkeys", get(handle_passkey_list))
+        .route("/passkeys/for", get(handle_passkeys_for))
         .route("/shares", get(handle_shares_list))
         .route("/offline", get(handle_offline_list))
         .route("/pull-to-refresh", get(handle_ptr_list))
@@ -481,6 +489,70 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_autofill_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.autofill_list())
+}
+
+async fn handle_password_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.password_list())
+}
+
+async fn handle_passwords_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.passwords_for(&q.host.unwrap_or_default()))
+}
+
+async fn handle_auth_saver_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.auth_saver_list())
+}
+
+async fn handle_auth_saver_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.auth_saver_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_saver_matches"),
+            )
+        })
+}
+
+async fn handle_secure_note_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.secure_note_list())
+}
+
+async fn handle_passkey_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.passkey_list())
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RpQuery {
+    #[serde(default)]
+    rp_id: Option<String>,
+}
+
+async fn handle_passkeys_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<RpQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.passkeys_for(&q.rp_id.unwrap_or_default()))
 }
 
 async fn handle_shares_list(

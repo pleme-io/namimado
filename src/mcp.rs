@@ -109,6 +109,11 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct RpIdRequest {
+    rp_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct DownloadNameRequest {
     name: String,
 }
@@ -771,6 +776,73 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(description = "List every (defautofill) profile.")]
+    async fn autofill_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.autofill_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defpasswords) vault source.")]
+    async fn password_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.password_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Password vaults that auto-fill into a host.")]
+    async fn passwords_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.passwords_for(&req.host)).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defauth-saver) profile.")]
+    async fn auth_saver_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.auth_saver_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve save-on-submit profile for a host.")]
+    async fn auth_saver_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.auth_saver_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_saver_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defsecure-note) profile.")]
+    async fn secure_note_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.secure_note_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defpasskey) WebAuthn profile.")]
+    async fn passkey_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.passkey_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Passkey profiles that permit a specific Relying Party ID.")]
+    async fn passkeys_for(
+        &self,
+        Parameters(req): Parameters<RpIdRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.passkeys_for(&req.rp_id))
+                .unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List every (defshare-target) destination.")]

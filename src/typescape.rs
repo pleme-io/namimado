@@ -238,6 +238,14 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/pull-to-refresh/resolve", "Resolved PTR rule for `?host=…`."),
         mk("GET", "/downloads", "Every (defdownload) policy profile."),
         mk("GET", "/downloads/:name", "Full DownloadSpec for one policy."),
+        mk("GET", "/autofill", "Every (defautofill) profile."),
+        mk("GET", "/passwords", "Every (defpasswords) vault source (22 backends)."),
+        mk("GET", "/passwords/for", "Vaults that auto-fill into `?host=…`."),
+        mk("GET", "/auth-saver", "Every (defauth-saver) save-on-submit profile."),
+        mk("GET", "/auth-saver/resolve", "Save profile for `?host=…`."),
+        mk("GET", "/secure-notes", "Every (defsecure-note) non-password-secret profile."),
+        mk("GET", "/passkeys", "Every (defpasskey) WebAuthn profile."),
+        mk("GET", "/passkeys/for", "Passkey profiles permitting `?rp_id=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -330,6 +338,14 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("pull_refresh_for", "Resolved PTR rule for a host."),
         mk("download_list", "Every (defdownload) policy."),
         mk("download_get", "Full DownloadSpec for one policy."),
+        mk("autofill_list", "Every (defautofill) profile."),
+        mk("password_list", "Every (defpasswords) vault source."),
+        mk("passwords_for", "Vaults that auto-fill into a host."),
+        mk("auth_saver_list", "Every (defauth-saver) profile."),
+        mk("auth_saver_for", "Save-on-submit profile for a host."),
+        mk("secure_note_list", "Every (defsecure-note) profile."),
+        mk("passkey_list", "Every (defpasskey) WebAuthn profile."),
+        mk("passkeys_for", "Passkey profiles permitting an RP ID."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -453,6 +469,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 48, "48 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 53, "53 DSL keywords expected in nami-core");
     }
 }

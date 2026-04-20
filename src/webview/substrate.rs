@@ -51,6 +51,11 @@ use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::pip::{PipRegistry, PipSpec};
 use nami_core::session::{SessionSpec, SessionStore, TabRecord};
 use nami_core::annotate::{AnnotateRegistry, AnnotateSpec};
+use nami_core::auth_saver::{AuthSaverRegistry, AuthSaverSpec};
+use nami_core::autofill::{AutofillRegistry, AutofillSpec};
+use nami_core::passkey::{PasskeyRegistry, PasskeySpec};
+use nami_core::passwords::{PasswordsRegistry, PasswordsSpec};
+use nami_core::secure_note::{SecureNoteRegistry, SecureNoteSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
 use nami_core::download::{DownloadRegistry, DownloadSpec};
@@ -198,6 +203,11 @@ pub struct SubstratePipeline {
     offlines: OfflineRegistry,
     pull_refreshes: PullRefreshRegistry,
     downloads: DownloadRegistry,
+    autofills: AutofillRegistry,
+    passwords: PasswordsRegistry,
+    auth_savers: AuthSaverRegistry,
+    secure_notes: SecureNoteRegistry,
+    passkeys: PasskeyRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -257,6 +267,11 @@ pub struct SubstratePipeline {
     offline_names: Vec<String>,
     pull_refresh_names: Vec<String>,
     download_names: Vec<String>,
+    autofill_names: Vec<String>,
+    password_names: Vec<String>,
+    auth_saver_names: Vec<String>,
+    secure_note_names: Vec<String>,
+    passkey_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -534,6 +549,42 @@ impl SubstratePipeline {
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
 
+        // Credentials pack.
+        let autofill_specs: Vec<AutofillSpec> =
+            nami_core::autofill::compile(&ext_src).unwrap_or_default();
+        let autofill_names: Vec<String> =
+            autofill_specs.iter().map(|s| s.name.clone()).collect();
+        let mut autofills = AutofillRegistry::new();
+        autofills.extend(autofill_specs);
+
+        let password_specs: Vec<PasswordsSpec> =
+            nami_core::passwords::compile(&ext_src).unwrap_or_default();
+        let password_names: Vec<String> =
+            password_specs.iter().map(|s| s.name.clone()).collect();
+        let mut passwords = PasswordsRegistry::new();
+        passwords.extend(password_specs);
+
+        let auth_saver_specs: Vec<AuthSaverSpec> =
+            nami_core::auth_saver::compile(&ext_src).unwrap_or_default();
+        let auth_saver_names: Vec<String> =
+            auth_saver_specs.iter().map(|s| s.name.clone()).collect();
+        let mut auth_savers = AuthSaverRegistry::new();
+        auth_savers.extend(auth_saver_specs);
+
+        let secure_note_specs: Vec<SecureNoteSpec> =
+            nami_core::secure_note::compile(&ext_src).unwrap_or_default();
+        let secure_note_names: Vec<String> =
+            secure_note_specs.iter().map(|s| s.name.clone()).collect();
+        let mut secure_notes = SecureNoteRegistry::new();
+        secure_notes.extend(secure_note_specs);
+
+        let passkey_specs: Vec<PasskeySpec> =
+            nami_core::passkey::compile(&ext_src).unwrap_or_default();
+        let passkey_names: Vec<String> =
+            passkey_specs.iter().map(|s| s.name.clone()).collect();
+        let mut passkeys = PasskeyRegistry::new();
+        passkeys.extend(passkey_specs);
+
         // Mobile + download pack.
         let share_specs: Vec<ShareTargetSpec> =
             nami_core::share::compile(&ext_src).unwrap_or_default();
@@ -736,7 +787,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -784,6 +835,11 @@ impl SubstratePipeline {
             offlines.len(),
             pull_refreshes.len(),
             downloads.len(),
+            autofills.len(),
+            passwords.len(),
+            auth_savers.len(),
+            secure_notes.len(),
+            passkeys.len(),
         );
 
         Self {
@@ -831,6 +887,11 @@ impl SubstratePipeline {
             offlines,
             pull_refreshes,
             downloads,
+            autofills,
+            passwords,
+            auth_savers,
+            secure_notes,
+            passkeys,
             session_store,
             session_spec,
             wasm_agents,
@@ -885,7 +946,70 @@ impl SubstratePipeline {
             offline_names,
             pull_refresh_names,
             download_names,
+            autofill_names,
+            password_names,
+            auth_saver_names,
+            secure_note_names,
+            passkey_names,
         }
+    }
+
+    // ── Credentials pack ─────────────────────────────────────────
+
+    #[must_use]
+    pub fn autofill_list(&self) -> Vec<AutofillSpec> {
+        self.autofills.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn autofill_get(&self, name: &str) -> Option<AutofillSpec> {
+        self.autofills.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn password_list(&self) -> Vec<PasswordsSpec> {
+        self.passwords.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn password_get(&self, name: &str) -> Option<PasswordsSpec> {
+        self.passwords.get(name).cloned()
+    }
+
+    /// Every password vault whose auto-fill scope covers `host`.
+    #[must_use]
+    pub fn passwords_for(&self, host: &str) -> Vec<PasswordsSpec> {
+        self.passwords.applicable(host).into_iter().cloned().collect()
+    }
+
+    #[must_use]
+    pub fn auth_saver_list(&self) -> Vec<AuthSaverSpec> {
+        self.auth_savers.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn auth_saver_for(&self, host: &str) -> Option<AuthSaverSpec> {
+        self.auth_savers.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn secure_note_list(&self) -> Vec<SecureNoteSpec> {
+        self.secure_notes.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn passkey_list(&self) -> Vec<PasskeySpec> {
+        self.passkeys.specs().to_vec()
+    }
+
+    /// Every passkey profile that permits `rp_id`.
+    #[must_use]
+    pub fn passkeys_for(&self, rp_id: &str) -> Vec<PasskeySpec> {
+        self.passkeys
+            .applicable(rp_id)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     // ── Mobile + download pack ───────────────────────────────────
@@ -1613,6 +1737,11 @@ impl SubstratePipeline {
             offlines: self.offline_names.clone(),
             pull_refreshes: self.pull_refresh_names.clone(),
             downloads: self.download_names.clone(),
+            autofills: self.autofill_names.clone(),
+            passwords: self.password_names.clone(),
+            auth_savers: self.auth_saver_names.clone(),
+            secure_notes: self.secure_note_names.clone(),
+            passkeys: self.passkey_names.clone(),
         }
     }
 
