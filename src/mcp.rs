@@ -221,6 +221,14 @@ struct SuggestionSourceRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct PermissionDecideRequest {
+    /// Kebab-case permission (camera, microphone, geolocation, usb, …).
+    permission: String,
+    /// Host the page is loaded on.
+    host: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SyncSignalRequest {
     /// One of: bookmarks, history, tabs, open-windows, passwords,
     /// passkeys, sessions, extensions, settings, reading-list,
@@ -1307,6 +1315,75 @@ impl NamimadoMcpServer {
         match self.service.suggestion_ranker_for_source(&req.source) {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_ranker_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defpermission-policy) profile.")]
+    async fn permission_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.permission_policy_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved permission-policy for a host.")]
+    async fn permission_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.permission_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_permission_policy_matches")),
+        }
+    }
+
+    #[tool(description = "Decide(permission, host) — returns the kebab-case decision (allow/block/prompt/prompt-ephemeral/require-user-gesture/block-with-badge).")]
+    async fn permission_decide(
+        &self,
+        Parameters(req): Parameters<PermissionDecideRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.permission_decide(&req.permission, &req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "permission_unknown: {}",
+                req.permission
+            ))),
+        }
+    }
+
+    #[tool(description = "List every (defpermission-prompt) profile.")]
+    async fn permission_prompt_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.permission_prompt_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full PermissionPromptSpec for one profile by name.")]
+    async fn permission_prompt_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.permission_prompt_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "permission_prompt_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Resolved prompt UX for (permission, host) — host+permission-specific preferred.")]
+    async fn permission_prompt_for(
+        &self,
+        Parameters(req): Parameters<PermissionDecideRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .service
+            .permission_prompt_for(&req.permission, &req.host)
+        {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_permission_prompt_matches")),
         }
     }
 

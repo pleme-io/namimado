@@ -80,6 +80,8 @@ use nami_core::cookie_jar::{CookieJarRegistry, CookieJarSpec};
 use nami_core::webgpu_policy::{WebgpuPolicyRegistry, WebgpuPolicySpec};
 use nami_core::suggestion_source::{SuggestionSourceRegistry, SuggestionSourceSpec};
 use nami_core::suggestion_ranker::{SuggestionRankerRegistry, SuggestionRankerSpec};
+use nami_core::permission_policy::{PermissionPolicyRegistry, PermissionPolicySpec};
+use nami_core::permission_prompt::{PermissionPromptRegistry, PermissionPromptSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -271,6 +273,8 @@ pub struct SubstratePipeline {
     webgpu_policies: WebgpuPolicyRegistry,
     suggestion_sources: SuggestionSourceRegistry,
     suggestion_rankers: SuggestionRankerRegistry,
+    permission_policies: PermissionPolicyRegistry,
+    permission_prompts: PermissionPromptRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -365,6 +369,8 @@ pub struct SubstratePipeline {
     webgpu_policy_names: Vec<String>,
     suggestion_source_names: Vec<String>,
     suggestion_ranker_names: Vec<String>,
+    permission_policy_names: Vec<String>,
+    permission_prompt_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -915,6 +921,41 @@ impl SubstratePipeline {
             suggestion_rankers.extend(suggestion_ranker_specs);
         }
 
+        // Permissions pack — policy + prompt UX.
+        let permission_policy_specs: Vec<PermissionPolicySpec> =
+            nami_core::permission_policy::compile(&ext_src).unwrap_or_default();
+        let permission_policy_names: Vec<String> = if permission_policy_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            permission_policy_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut permission_policies = PermissionPolicyRegistry::new();
+        if permission_policy_specs.is_empty() {
+            permission_policies.insert(PermissionPolicySpec::default_profile());
+        } else {
+            permission_policies.extend(permission_policy_specs);
+        }
+
+        let permission_prompt_specs: Vec<PermissionPromptSpec> =
+            nami_core::permission_prompt::compile(&ext_src).unwrap_or_default();
+        let permission_prompt_names: Vec<String> = if permission_prompt_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            permission_prompt_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut permission_prompts = PermissionPromptRegistry::new();
+        if permission_prompt_specs.is_empty() {
+            permission_prompts.insert(PermissionPromptSpec::default_profile());
+        } else {
+            permission_prompts.extend(permission_prompt_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1257,7 +1298,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1340,6 +1381,8 @@ impl SubstratePipeline {
             webgpu_policies.len(),
             suggestion_sources.len(),
             suggestion_rankers.len(),
+            permission_policies.len(),
+            permission_prompts.len(),
         );
 
         Self {
@@ -1423,6 +1466,8 @@ impl SubstratePipeline {
             webgpu_policies,
             suggestion_sources,
             suggestion_rankers,
+            permission_policies,
+            permission_prompts,
             session_store,
             session_spec,
             wasm_agents,
@@ -1512,6 +1557,8 @@ impl SubstratePipeline {
             webgpu_policy_names,
             suggestion_source_names,
             suggestion_ranker_names,
+            permission_policy_names,
+            permission_prompt_names,
         }
     }
 
@@ -1786,6 +1833,49 @@ impl SubstratePipeline {
         source_name: &str,
     ) -> Option<SuggestionRankerSpec> {
         self.suggestion_rankers.for_source(source_name).cloned()
+    }
+
+    // ── Permissions pack ─────────────────────────────────────────
+
+    #[must_use]
+    pub fn permission_policy_list(&self) -> Vec<PermissionPolicySpec> {
+        self.permission_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn permission_policy_for(&self, host: &str) -> Option<PermissionPolicySpec> {
+        self.permission_policies.resolve(host).cloned()
+    }
+
+    /// Concrete decision for `permission` on `host`.
+    #[must_use]
+    pub fn permission_decide(
+        &self,
+        permission: nami_core::permission_policy::Permission,
+        host: &str,
+    ) -> Option<nami_core::permission_policy::Decision> {
+        self.permission_policies
+            .resolve(host)
+            .map(|p| p.decide(permission, host))
+    }
+
+    #[must_use]
+    pub fn permission_prompt_list(&self) -> Vec<PermissionPromptSpec> {
+        self.permission_prompts.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn permission_prompt_get(&self, name: &str) -> Option<PermissionPromptSpec> {
+        self.permission_prompts.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn permission_prompt_for(
+        &self,
+        permission: nami_core::permission_policy::Permission,
+        host: &str,
+    ) -> Option<PermissionPromptSpec> {
+        self.permission_prompts.resolve(permission, host).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2782,6 +2872,8 @@ impl SubstratePipeline {
             webgpu_policies: self.webgpu_policy_names.clone(),
             suggestion_sources: self.suggestion_source_names.clone(),
             suggestion_rankers: self.suggestion_ranker_names.clone(),
+            permission_policies: self.permission_policy_names.clone(),
+            permission_prompts: self.permission_prompt_names.clone(),
         }
     }
 

@@ -264,6 +264,8 @@ pub struct RulesInventory {
     pub webgpu_policies: Vec<String>,
     pub suggestion_sources: Vec<String>,
     pub suggestion_rankers: Vec<String>,
+    pub permission_policies: Vec<String>,
+    pub permission_prompts: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

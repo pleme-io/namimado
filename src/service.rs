@@ -1209,6 +1209,86 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn suggestion_ranker_for_source(&self, _s: &str) -> Option<serde_json::Value> { None }
 
+    // ── Permissions pack ─────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn permission_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .permission_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn permission_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .permission_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// Decide(permission, host) — returns the kebab-case decision as
+    /// a JSON string. Returns None for unknown permissions.
+    #[cfg(feature = "browser-core")]
+    pub fn permission_decide(&self, permission: &str, host: &str) -> Option<serde_json::Value> {
+        let perm = parse_permission(permission)?;
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.permission_decide(perm, host).map(|d| {
+            serde_json::to_value(&d).unwrap_or(serde_json::Value::Null)
+        })
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn permission_prompt_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .permission_prompt_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn permission_prompt_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .permission_prompt_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn permission_prompt_for(
+        &self,
+        permission: &str,
+        host: &str,
+    ) -> Option<serde_json::Value> {
+        let perm = parse_permission(permission)?;
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .permission_prompt_for(perm, host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_policy_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_decide(&self, _p: &str, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_prompt_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_prompt_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn permission_prompt_for(&self, _p: &str, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2821,6 +2901,38 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+fn parse_permission(s: &str) -> Option<nami_core::permission_policy::Permission> {
+    use nami_core::permission_policy::Permission::*;
+    Some(match s {
+        "camera" => Camera,
+        "microphone" => Microphone,
+        "geolocation" => Geolocation,
+        "notifications" => Notifications,
+        "persistent-storage" => PersistentStorage,
+        "clipboard-read" => ClipboardRead,
+        "clipboard-write" => ClipboardWrite,
+        "midi" => Midi,
+        "background-sync" => BackgroundSync,
+        "idle-detection" => IdleDetection,
+        "screen-wake" => ScreenWake,
+        "usb" => Usb,
+        "serial" => Serial,
+        "hid" => Hid,
+        "bluetooth" => Bluetooth,
+        "nfc-read" => NfcRead,
+        "ambient-light-sensor" => AmbientLightSensor,
+        "popups" => Popups,
+        "push" => Push,
+        "autoplay-with-sound" => AutoplayWithSound,
+        "display-capture" => DisplayCapture,
+        "protected-media" => ProtectedMedia,
+        "payment-handler" => PaymentHandler,
+        "custom" => Custom,
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_sync_signal(s: &str) -> Option<nami_core::sync_channel::SyncSignal> {
     use nami_core::sync_channel::SyncSignal::*;
     Some(match s {
@@ -3254,6 +3366,28 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn permissions_pack_default_policy_and_prompt_wired() {
+        let svc = NamimadoService::new();
+        assert!(!svc.permission_policy_list().is_empty());
+        assert!(!svc.permission_prompt_list().is_empty());
+        assert!(svc.permission_policy_for("example.com").is_some());
+        // Default: camera is "prompt".
+        assert_eq!(
+            svc.permission_decide("camera", "example.com"),
+            Some(serde_json::json!("prompt"))
+        );
+        // USB is blocked by default.
+        assert_eq!(
+            svc.permission_decide("usb", "example.com"),
+            Some(serde_json::json!("block"))
+        );
+        // Unknown permission → None.
+        assert!(svc.permission_decide("bogus", "example.com").is_none());
+        // Default prompt resolves for any permission on any host.
+        assert!(svc.permission_prompt_for("camera", "example.com").is_some());
     }
 
     #[test]

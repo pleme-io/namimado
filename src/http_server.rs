@@ -135,6 +135,24 @@ pub fn router(service: NamimadoService) -> Router {
             "/suggestion-ranker/for-source/:source",
             get(handle_suggestion_ranker_for_source),
         )
+        .route("/permission-policy", get(handle_permission_policy_list))
+        .route(
+            "/permission-policy/resolve",
+            get(handle_permission_policy_for),
+        )
+        .route(
+            "/permission-policy/decide",
+            get(handle_permission_decide),
+        )
+        .route("/permission-prompt", get(handle_permission_prompt_list))
+        .route(
+            "/permission-prompt/:name",
+            get(handle_permission_prompt_get),
+        )
+        .route(
+            "/permission-prompt/resolve",
+            get(handle_permission_prompt_for),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1059,6 +1077,78 @@ async fn handle_suggestion_ranker_for_source(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_ranker_matches"),
+            )
+        })
+}
+
+async fn handle_permission_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.permission_policy_list())
+}
+
+async fn handle_permission_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.permission_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_permission_policy_matches"),
+            )
+        })
+}
+
+#[derive(Debug, Deserialize)]
+struct PermissionDecideQuery {
+    permission: String,
+    host: Option<String>,
+}
+
+async fn handle_permission_decide(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<PermissionDecideQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.permission_decide(&q.permission, &q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::BAD_REQUEST,
+                ApiError::new("permission_unknown").with_detail(q.permission),
+            )
+        })
+}
+
+async fn handle_permission_prompt_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.permission_prompt_list())
+}
+
+async fn handle_permission_prompt_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.permission_prompt_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("permission_prompt_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_permission_prompt_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<PermissionDecideQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.permission_prompt_for(&q.permission, &q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_permission_prompt_matches"),
             )
         })
 }

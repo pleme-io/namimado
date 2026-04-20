@@ -313,6 +313,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/suggestion-ranker", "Every (defsuggestion-ranker) profile."),
         mk("GET", "/suggestion-ranker/:name", "Full SuggestionRankerSpec for one profile."),
         mk("GET", "/suggestion-ranker/for-source/:source", "Ranker responsible for a named source."),
+        mk("GET", "/permission-policy", "Every (defpermission-policy) profile."),
+        mk("GET", "/permission-policy/resolve", "Permission policy for `?host=…`."),
+        mk("GET", "/permission-policy/decide", "Concrete decision for `?permission=…&host=…`."),
+        mk("GET", "/permission-prompt", "Every (defpermission-prompt) profile."),
+        mk("GET", "/permission-prompt/:name", "Full PermissionPromptSpec by name."),
+        mk("GET", "/permission-prompt/resolve", "Prompt UX for `?permission=…&host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -480,6 +486,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("suggestion_ranker_list", "Every (defsuggestion-ranker) profile."),
         mk("suggestion_ranker_get", "Full SuggestionRankerSpec for one profile by name."),
         mk("suggestion_ranker_for_source", "Ranker responsible for a named source."),
+        mk("permission_policy_list", "Every (defpermission-policy) profile."),
+        mk("permission_policy_for", "Permission policy for a host."),
+        mk("permission_decide", "Concrete decision for (permission, host)."),
+        mk("permission_prompt_list", "Every (defpermission-prompt) profile."),
+        mk("permission_prompt_get", "Full PermissionPromptSpec by name."),
+        mk("permission_prompt_for", "Prompt UX for (permission, host)."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -603,6 +615,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 83, "83 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 85, "85 DSL keywords expected in nami-core");
     }
 }
