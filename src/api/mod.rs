@@ -266,6 +266,9 @@ pub struct RulesInventory {
     pub suggestion_rankers: Vec<String>,
     pub permission_policies: Vec<String>,
     pub permission_prompts: Vec<String>,
+    pub resource_hints: Vec<String>,
+    pub bfcache_policies: Vec<String>,
+    pub prerender_rules: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

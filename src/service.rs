@@ -1289,6 +1289,96 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn permission_prompt_for(&self, _p: &str, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Performance pack ─────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn resource_hint_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .resource_hint_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn resource_hint_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .resource_hint_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn resource_hints_for(&self, host: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .resource_hints_for(host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn bfcache_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .bfcache_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn bfcache_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .bfcache_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn prerender_rule_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .prerender_rule_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn prerender_rules_for(&self, host: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .prerender_rules_for(host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn resource_hint_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn resource_hint_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn resource_hints_for(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn bfcache_policy_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn bfcache_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn prerender_rule_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn prerender_rules_for(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3366,6 +3456,21 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn performance_pack_bfcache_and_prerender_auto_registered() {
+        let svc = NamimadoService::new();
+        // resource_hints does NOT auto-register — user must author
+        // host-specific hints. bfcache + prerender DO auto-register.
+        assert!(svc.resource_hint_list().is_empty());
+        assert!(!svc.bfcache_policy_list().is_empty());
+        assert!(!svc.prerender_rule_list().is_empty());
+        assert!(svc.bfcache_policy_for("example.com").is_some());
+        // Default prerender rule resolves for any host (host="*").
+        assert!(!svc.prerender_rules_for("example.com").is_empty());
+        // Empty hints_for when no hints declared.
+        assert!(svc.resource_hints_for("example.com").is_empty());
     }
 
     #[test]

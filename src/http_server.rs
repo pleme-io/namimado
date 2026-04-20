@@ -153,6 +153,19 @@ pub fn router(service: NamimadoService) -> Router {
             "/permission-prompt/resolve",
             get(handle_permission_prompt_for),
         )
+        .route("/resource-hint", get(handle_resource_hint_list))
+        .route("/resource-hint/:name", get(handle_resource_hint_get))
+        .route(
+            "/resource-hint/for-host",
+            get(handle_resource_hints_for_host),
+        )
+        .route("/bfcache-policy", get(handle_bfcache_policy_list))
+        .route("/bfcache-policy/resolve", get(handle_bfcache_policy_for))
+        .route("/prerender-rule", get(handle_prerender_rule_list))
+        .route(
+            "/prerender-rule/for-host",
+            get(handle_prerender_rules_for_host),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1151,6 +1164,64 @@ async fn handle_permission_prompt_for(
                 ApiError::new("no_permission_prompt_matches"),
             )
         })
+}
+
+async fn handle_resource_hint_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.resource_hint_list())
+}
+
+async fn handle_resource_hint_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.resource_hint_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("resource_hint_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_resource_hints_for_host(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.resource_hints_for(&q.host.unwrap_or_default()))
+}
+
+async fn handle_bfcache_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.bfcache_policy_list())
+}
+
+async fn handle_bfcache_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.bfcache_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_bfcache_policy_matches"),
+            )
+        })
+}
+
+async fn handle_prerender_rule_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.prerender_rule_list())
+}
+
+async fn handle_prerender_rules_for_host(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.prerender_rules_for(&q.host.unwrap_or_default()))
 }
 
 async fn handle_inspector_list(

@@ -1387,6 +1387,74 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defresource-hint) profile.")]
+    async fn resource_hint_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.resource_hint_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full ResourceHintSpec for one profile by name.")]
+    async fn resource_hint_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.resource_hint_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "resource_hint_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Every resource hint applicable to a host, priority-sorted.")]
+    async fn resource_hints_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.resource_hints_for(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defbfcache-policy) profile.")]
+    async fn bfcache_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.bfcache_policy_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved bfcache policy for a host.")]
+    async fn bfcache_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.bfcache_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_bfcache_policy_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defprerender-rule) profile.")]
+    async fn prerender_rule_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.prerender_rule_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Every prerender rule applicable to a host.")]
+    async fn prerender_rules_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.prerender_rules_for(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

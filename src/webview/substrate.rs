@@ -82,6 +82,9 @@ use nami_core::suggestion_source::{SuggestionSourceRegistry, SuggestionSourceSpe
 use nami_core::suggestion_ranker::{SuggestionRankerRegistry, SuggestionRankerSpec};
 use nami_core::permission_policy::{PermissionPolicyRegistry, PermissionPolicySpec};
 use nami_core::permission_prompt::{PermissionPromptRegistry, PermissionPromptSpec};
+use nami_core::resource_hint::{ResourceHintRegistry, ResourceHintSpec};
+use nami_core::bfcache_policy::{BfcachePolicyRegistry, BfcachePolicySpec};
+use nami_core::prerender_rule::{PrerenderRuleRegistry, PrerenderRuleSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -275,6 +278,9 @@ pub struct SubstratePipeline {
     suggestion_rankers: SuggestionRankerRegistry,
     permission_policies: PermissionPolicyRegistry,
     permission_prompts: PermissionPromptRegistry,
+    resource_hints: ResourceHintRegistry,
+    bfcache_policies: BfcachePolicyRegistry,
+    prerender_rules: PrerenderRuleRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -371,6 +377,9 @@ pub struct SubstratePipeline {
     suggestion_ranker_names: Vec<String>,
     permission_policy_names: Vec<String>,
     permission_prompt_names: Vec<String>,
+    resource_hint_names: Vec<String>,
+    bfcache_policy_names: Vec<String>,
+    prerender_rule_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -956,6 +965,42 @@ impl SubstratePipeline {
             permission_prompts.extend(permission_prompt_specs);
         }
 
+        // Performance pack — resource hints, bfcache, prerender rules.
+        let resource_hint_specs: Vec<ResourceHintSpec> =
+            nami_core::resource_hint::compile(&ext_src).unwrap_or_default();
+        let resource_hint_names: Vec<String> =
+            resource_hint_specs.iter().map(|s| s.name.clone()).collect();
+        let mut resource_hints = ResourceHintRegistry::new();
+        resource_hints.extend(resource_hint_specs);
+
+        let bfcache_policy_specs: Vec<BfcachePolicySpec> =
+            nami_core::bfcache_policy::compile(&ext_src).unwrap_or_default();
+        let bfcache_policy_names: Vec<String> = if bfcache_policy_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            bfcache_policy_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut bfcache_policies = BfcachePolicyRegistry::new();
+        if bfcache_policy_specs.is_empty() {
+            bfcache_policies.insert(BfcachePolicySpec::default_profile());
+        } else {
+            bfcache_policies.extend(bfcache_policy_specs);
+        }
+
+        let prerender_rule_specs: Vec<PrerenderRuleSpec> =
+            nami_core::prerender_rule::compile(&ext_src).unwrap_or_default();
+        let prerender_rule_names: Vec<String> = if prerender_rule_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            prerender_rule_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut prerender_rules = PrerenderRuleRegistry::new();
+        if prerender_rule_specs.is_empty() {
+            prerender_rules.insert(PrerenderRuleSpec::default_profile());
+        } else {
+            prerender_rules.extend(prerender_rule_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1298,7 +1343,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1383,6 +1428,9 @@ impl SubstratePipeline {
             suggestion_rankers.len(),
             permission_policies.len(),
             permission_prompts.len(),
+            resource_hints.len(),
+            bfcache_policies.len(),
+            prerender_rules.len(),
         );
 
         Self {
@@ -1468,6 +1516,9 @@ impl SubstratePipeline {
             suggestion_rankers,
             permission_policies,
             permission_prompts,
+            resource_hints,
+            bfcache_policies,
+            prerender_rules,
             session_store,
             session_spec,
             wasm_agents,
@@ -1559,6 +1610,9 @@ impl SubstratePipeline {
             suggestion_ranker_names,
             permission_policy_names,
             permission_prompt_names,
+            resource_hint_names,
+            bfcache_policy_names,
+            prerender_rule_names,
         }
     }
 
@@ -1876,6 +1930,51 @@ impl SubstratePipeline {
         host: &str,
     ) -> Option<PermissionPromptSpec> {
         self.permission_prompts.resolve(permission, host).cloned()
+    }
+
+    // ── Performance pack ─────────────────────────────────────────
+
+    #[must_use]
+    pub fn resource_hint_list(&self) -> Vec<ResourceHintSpec> {
+        self.resource_hints.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn resource_hint_get(&self, name: &str) -> Option<ResourceHintSpec> {
+        self.resource_hints.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn resource_hints_for(&self, host: &str) -> Vec<ResourceHintSpec> {
+        self.resource_hints
+            .hints_for(host)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    #[must_use]
+    pub fn bfcache_policy_list(&self) -> Vec<BfcachePolicySpec> {
+        self.bfcache_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn bfcache_policy_for(&self, host: &str) -> Option<BfcachePolicySpec> {
+        self.bfcache_policies.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn prerender_rule_list(&self) -> Vec<PrerenderRuleSpec> {
+        self.prerender_rules.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn prerender_rules_for(&self, host: &str) -> Vec<PrerenderRuleSpec> {
+        self.prerender_rules
+            .rules_for(host)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2874,6 +2973,9 @@ impl SubstratePipeline {
             suggestion_rankers: self.suggestion_ranker_names.clone(),
             permission_policies: self.permission_policy_names.clone(),
             permission_prompts: self.permission_prompt_names.clone(),
+            resource_hints: self.resource_hint_names.clone(),
+            bfcache_policies: self.bfcache_policy_names.clone(),
+            prerender_rules: self.prerender_rule_names.clone(),
         }
     }
 
