@@ -109,6 +109,11 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct DownloadNameRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct OutlineToolRequest {
     profile: Option<String>,
 }
@@ -765,6 +770,59 @@ impl NamimadoMcpServer {
                 "extension_unknown: {}",
                 req.name
             )))
+        }
+    }
+
+    #[tool(description = "List every (defshare-target) destination.")]
+    async fn share_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.share_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defoffline) save-for-later profile.")]
+    async fn offline_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.offline_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defpull-to-refresh) rule.")]
+    async fn pull_refresh_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.pull_refresh_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve (defpull-to-refresh) for a host.")]
+    async fn pull_refresh_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.pull_refresh_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_ptr_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defdownload) policy profile.")]
+    async fn download_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.download_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full DownloadSpec for one named policy.")]
+    async fn download_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.download_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "download_unknown: {}",
+                req.name
+            ))),
         }
     }
 

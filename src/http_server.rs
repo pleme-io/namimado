@@ -71,6 +71,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/shares", get(handle_shares_list))
+        .route("/offline", get(handle_offline_list))
+        .route("/pull-to-refresh", get(handle_ptr_list))
+        .route("/pull-to-refresh/resolve", get(handle_ptr_for))
+        .route("/downloads", get(handle_downloads_list))
+        .route("/downloads/:name", get(handle_downloads_get))
         .route("/outline", post(handle_outline))
         .route("/annotate", get(handle_annotate_list))
         .route("/feeds", get(handle_feed_list))
@@ -475,6 +481,56 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_shares_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.share_list())
+}
+
+async fn handle_offline_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.offline_list())
+}
+
+async fn handle_ptr_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.pull_refresh_list())
+}
+
+async fn handle_ptr_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.pull_refresh_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_ptr_matches"),
+            )
+        })
+}
+
+async fn handle_downloads_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.download_list())
+}
+
+async fn handle_downloads_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.download_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("download_unknown").with_detail(name),
+        )
+    })
 }
 
 async fn handle_outline(

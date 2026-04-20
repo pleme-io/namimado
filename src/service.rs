@@ -583,6 +583,100 @@ impl NamimadoService {
         }
     }
 
+    // ── Mobile + download pack ───────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn share_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .share_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn share_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn offline_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .offline_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn offline_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn pull_refresh_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .pull_refresh_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn pull_refresh_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .pull_refresh_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn pull_refresh_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn pull_refresh_for(&self, _h: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn download_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .download_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn download_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .download_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn download_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn download_get(&self, _n: &str) -> Option<serde_json::Value> {
+        None
+    }
+
     // ── Reading pack ─────────────────────────────────────────────
 
     /// POST /outline — extract outline from the last-navigated page.
@@ -2063,6 +2157,30 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn mobile_download_pack_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        assert!(svc.share_list().is_empty());
+        assert!(svc.offline_list().is_empty());
+        assert!(svc.pull_refresh_list().is_empty());
+        // Download auto-registers a default profile so list is not empty,
+        // but get("nonexistent") returns None.
+        assert!(svc.download_get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn download_default_profile_auto_loads() {
+        let svc = NamimadoService::new();
+        let list = svc.download_list();
+        assert!(!list.is_empty(), "default download profile should auto-register");
+    }
+
+    #[test]
+    fn pull_refresh_resolve_empty_host_is_none() {
+        let svc = NamimadoService::new();
+        assert!(svc.pull_refresh_for("anywhere.com").is_none());
     }
 
     #[test]

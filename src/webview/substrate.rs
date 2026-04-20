@@ -53,6 +53,10 @@ use nami_core::session::{SessionSpec, SessionStore, TabRecord};
 use nami_core::annotate::{AnnotateRegistry, AnnotateSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
+use nami_core::download::{DownloadRegistry, DownloadSpec};
+use nami_core::offline::{OfflineRegistry, OfflineSpec};
+use nami_core::pull_refresh::{PullRefreshRegistry, PullRefreshSpec};
+use nami_core::share::{ShareRegistry, ShareTargetSpec};
 use nami_core::feed::{FeedRegistry, FeedSpec};
 use nami_core::outline::{OutlineRegistry, OutlineSpec};
 use nami_core::redirect::{RedirectRegistry, RedirectSpec};
@@ -190,6 +194,10 @@ pub struct SubstratePipeline {
     url_cleans: UrlCleanRegistry,
     script_policies: ScriptPolicyRegistry,
     bridges: BridgeRegistry,
+    shares: ShareRegistry,
+    offlines: OfflineRegistry,
+    pull_refreshes: PullRefreshRegistry,
+    downloads: DownloadRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -245,6 +253,10 @@ pub struct SubstratePipeline {
     url_clean_names: Vec<String>,
     script_policy_names: Vec<String>,
     bridge_names: Vec<String>,
+    share_names: Vec<String>,
+    offline_names: Vec<String>,
+    pull_refresh_names: Vec<String>,
+    download_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -522,6 +534,42 @@ impl SubstratePipeline {
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
 
+        // Mobile + download pack.
+        let share_specs: Vec<ShareTargetSpec> =
+            nami_core::share::compile(&ext_src).unwrap_or_default();
+        let share_names: Vec<String> =
+            share_specs.iter().map(|s| s.name.clone()).collect();
+        let mut shares = ShareRegistry::new();
+        shares.extend(share_specs);
+
+        let offline_specs: Vec<OfflineSpec> =
+            nami_core::offline::compile(&ext_src).unwrap_or_default();
+        let offline_names: Vec<String> =
+            offline_specs.iter().map(|s| s.name.clone()).collect();
+        let mut offlines = OfflineRegistry::new();
+        offlines.extend(offline_specs);
+
+        let ptr_specs: Vec<PullRefreshSpec> =
+            nami_core::pull_refresh::compile(&ext_src).unwrap_or_default();
+        let pull_refresh_names: Vec<String> =
+            ptr_specs.iter().map(|s| s.name.clone()).collect();
+        let mut pull_refreshes = PullRefreshRegistry::new();
+        pull_refreshes.extend(ptr_specs);
+
+        let download_specs: Vec<DownloadSpec> =
+            nami_core::download::compile(&ext_src).unwrap_or_default();
+        let download_names: Vec<String> = if download_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            download_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut downloads = DownloadRegistry::new();
+        if download_specs.is_empty() {
+            downloads.insert(DownloadSpec::default_profile());
+        } else {
+            downloads.extend(download_specs);
+        }
+
         // Privacy pack — spoof, dns, routing.
         let spoof_specs: Vec<SpoofSpec> =
             nami_core::spoof::compile(&ext_src).unwrap_or_default();
@@ -688,7 +736,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -732,6 +780,10 @@ impl SubstratePipeline {
             url_cleans.len(),
             script_policies.len(),
             bridges.len(),
+            shares.len(),
+            offlines.len(),
+            pull_refreshes.len(),
+            downloads.len(),
         );
 
         Self {
@@ -775,6 +827,10 @@ impl SubstratePipeline {
             url_cleans,
             script_policies,
             bridges,
+            shares,
+            offlines,
+            pull_refreshes,
+            downloads,
             session_store,
             session_spec,
             wasm_agents,
@@ -825,7 +881,43 @@ impl SubstratePipeline {
             url_clean_names,
             script_policy_names,
             bridge_names,
+            share_names,
+            offline_names,
+            pull_refresh_names,
+            download_names,
         }
+    }
+
+    // ── Mobile + download pack ───────────────────────────────────
+
+    #[must_use]
+    pub fn share_list(&self) -> Vec<ShareTargetSpec> {
+        self.shares.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn offline_list(&self) -> Vec<OfflineSpec> {
+        self.offlines.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn pull_refresh_list(&self) -> Vec<PullRefreshSpec> {
+        self.pull_refreshes.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn pull_refresh_for(&self, host: &str) -> Option<PullRefreshSpec> {
+        self.pull_refreshes.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn download_list(&self) -> Vec<DownloadSpec> {
+        self.downloads.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn download_get(&self, name: &str) -> Option<DownloadSpec> {
+        self.downloads.get(name).cloned()
     }
 
     // ── Reading pack ─────────────────────────────────────────────
@@ -1517,6 +1609,10 @@ impl SubstratePipeline {
             url_cleans: self.url_clean_names.clone(),
             script_policies: self.script_policy_names.clone(),
             bridges: self.bridge_names.clone(),
+            shares: self.share_names.clone(),
+            offlines: self.offline_names.clone(),
+            pull_refreshes: self.pull_refresh_names.clone(),
+            downloads: self.download_names.clone(),
         }
     }
 

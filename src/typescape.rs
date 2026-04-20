@@ -232,6 +232,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/script-policy/resolve", "Resolved script policy for `?host=…`."),
         mk("GET", "/bridges", "Every (defbridge) entry."),
         mk("GET", "/bridges/torrc", "torrc `Bridge …` config block for every enabled bridge."),
+        mk("GET", "/shares", "Every (defshare-target) destination."),
+        mk("GET", "/offline", "Every (defoffline) save-for-later profile."),
+        mk("GET", "/pull-to-refresh", "Every (defpull-to-refresh) rule."),
+        mk("GET", "/pull-to-refresh/resolve", "Resolved PTR rule for `?host=…`."),
+        mk("GET", "/downloads", "Every (defdownload) policy profile."),
+        mk("GET", "/downloads/:name", "Full DownloadSpec for one policy."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -318,6 +324,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("script_policy_for", "Resolved script policy for a host."),
         mk("bridge_list", "All (defbridge) entries."),
         mk("bridges_torrc_block", "torrc block for enabled bridges."),
+        mk("share_list", "Every (defshare-target) destination."),
+        mk("offline_list", "Every (defoffline) profile."),
+        mk("pull_refresh_list", "Every (defpull-to-refresh) rule."),
+        mk("pull_refresh_for", "Resolved PTR rule for a host."),
+        mk("download_list", "Every (defdownload) policy."),
+        mk("download_get", "Full DownloadSpec for one policy."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -441,6 +453,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 44, "44 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 48, "48 DSL keywords expected in nami-core");
     }
 }

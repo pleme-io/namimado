@@ -225,6 +225,10 @@ pub struct RulesInventory {
     pub url_cleans: Vec<String>,
     pub script_policies: Vec<String>,
     pub bridges: Vec<String>,
+    pub shares: Vec<String>,
+    pub offlines: Vec<String>,
+    pub pull_refreshes: Vec<String>,
+    pub downloads: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
