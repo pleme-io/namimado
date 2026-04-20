@@ -27,7 +27,7 @@ use crate::api::{
     JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
     OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
     RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
-    SpaceActivateResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
+    RoutingResolveResponse, SpaceActivateResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
     StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
@@ -579,6 +579,120 @@ impl NamimadoService {
             query: query.to_owned(),
             profile: profile.unwrap_or("default").to_owned(),
             suggestions: Vec::new(),
+        }
+    }
+
+    // ── Privacy pack ─────────────────────────────────────────────
+
+    /// GET /spoofs
+    #[cfg(feature = "browser-core")]
+    pub fn spoofs_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .spoofs_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn spoofs_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /spoof?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn spoof_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .spoof_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn spoof_for(&self, _h: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// GET /dns
+    #[cfg(feature = "browser-core")]
+    pub fn dns_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .dns_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn dns_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /dns/:name
+    #[cfg(feature = "browser-core")]
+    pub fn dns_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .dns_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn dns_get(&self, _n: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// GET /routing
+    #[cfg(feature = "browser-core")]
+    pub fn routing_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .routing_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn routing_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /routing/resolve?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn routing_resolve(&self, host: &str) -> RoutingResolveResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let (rule, via) = inner.pipeline.routing_for(host);
+        let (kind, target) = match via {
+            nami_core::routing::RouteVia::Direct => ("direct", None),
+            nami_core::routing::RouteVia::Tunnel(n) => ("tunnel", Some(n)),
+            nami_core::routing::RouteVia::Tor(n) => ("tor", Some(n)),
+            nami_core::routing::RouteVia::Socks5(u) => ("socks5", Some(u)),
+            nami_core::routing::RouteVia::PluggableTransport(n) => ("pt", Some(n)),
+            nami_core::routing::RouteVia::Unknown(s) => ("unknown", Some(s)),
+        };
+        RoutingResolveResponse {
+            host: host.to_owned(),
+            rule,
+            via_kind: kind.to_owned(),
+            via_target: target,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn routing_resolve(&self, host: &str) -> RoutingResolveResponse {
+        RoutingResolveResponse {
+            host: host.to_owned(),
+            rule: None,
+            via_kind: "direct".to_owned(),
+            via_target: None,
         }
     }
 
@@ -1752,6 +1866,24 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn privacy_pack_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        assert!(svc.spoofs_list().is_empty());
+        assert!(svc.dns_list().is_empty());
+        assert!(svc.routing_list().is_empty());
+        assert!(svc.spoof_for("example.com").is_none());
+    }
+
+    #[test]
+    fn routing_resolve_defaults_to_direct() {
+        let svc = NamimadoService::new();
+        let r = svc.routing_resolve("example.com");
+        assert_eq!(r.via_kind, "direct");
+        assert!(r.rule.is_none());
+        assert!(r.via_target.is_none());
     }
 
     #[test]

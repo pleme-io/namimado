@@ -215,6 +215,9 @@ pub struct RulesInventory {
     pub spaces: Vec<String>,
     pub sidebars: Vec<String>,
     pub splits: Vec<String>,
+    pub spoofs: Vec<String>,
+    pub dnses: Vec<String>,
+    pub routings: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -280,6 +283,20 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// GET /routing?host=… — response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RoutingResolveResponse {
+    pub host: String,
+    /// Matched rule name (None when no rule applied — falls through
+    /// to `"direct"`).
+    pub rule: Option<String>,
+    /// `"direct"` | `"tunnel"` | `"tor"` | `"socks5"` | `"pt"` |
+    /// `"unknown"`.
+    pub via_kind: String,
+    /// Strategy argument — tunnel name / isolation name / URL / etc.
+    pub via_target: Option<String>,
 }
 
 /// POST /spaces/:name/activate — response.

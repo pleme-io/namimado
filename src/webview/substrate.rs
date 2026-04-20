@@ -50,10 +50,13 @@ use nami_core::js_runtime::{
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::pip::{PipRegistry, PipSpec};
 use nami_core::session::{SessionSpec, SessionStore, TabRecord};
+use nami_core::dns::{DnsRegistry, DnsSpec};
+use nami_core::routing::{RouteVia, RoutingRegistry, RoutingSpec};
 use nami_core::sidebar::{SidebarRegistry, SidebarSpec};
 use nami_core::snapshot::{SnapshotRegistry, SnapshotSpec};
 use nami_core::space::{SpaceRegistry, SpaceSpec, SpaceState};
 use nami_core::split::{SplitRegistry, SplitSpec};
+use nami_core::spoof::{SpoofRegistry, SpoofSpec};
 use nami_core::zoom::{ZoomRegistry, ZoomSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::security_policy::{
@@ -170,6 +173,9 @@ pub struct SubstratePipeline {
     space_state: Arc<std::sync::Mutex<SpaceState>>,
     sidebars: SidebarRegistry,
     splits: SplitRegistry,
+    spoofs: SpoofRegistry,
+    dnses: DnsRegistry,
+    routings: RoutingRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -215,6 +221,9 @@ pub struct SubstratePipeline {
     space_names: Vec<String>,
     sidebar_names: Vec<String>,
     split_names: Vec<String>,
+    spoof_names: Vec<String>,
+    dns_names: Vec<String>,
+    routing_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -434,6 +443,28 @@ impl SubstratePipeline {
         let mut boosts = BoostRegistry::new();
         boosts.extend(boost_specs);
 
+        // Privacy pack — spoof, dns, routing.
+        let spoof_specs: Vec<SpoofSpec> =
+            nami_core::spoof::compile(&ext_src).unwrap_or_default();
+        let spoof_names: Vec<String> =
+            spoof_specs.iter().map(|s| s.name.clone()).collect();
+        let mut spoofs = SpoofRegistry::new();
+        spoofs.extend(spoof_specs);
+
+        let dns_specs: Vec<DnsSpec> =
+            nami_core::dns::compile(&ext_src).unwrap_or_default();
+        let dns_names: Vec<String> =
+            dns_specs.iter().map(|s| s.name.clone()).collect();
+        let mut dnses = DnsRegistry::new();
+        dnses.extend(dns_specs);
+
+        let routing_specs: Vec<RoutingSpec> =
+            nami_core::routing::compile(&ext_src).unwrap_or_default();
+        let routing_names: Vec<String> =
+            routing_specs.iter().map(|s| s.name.clone()).collect();
+        let mut routings = RoutingRegistry::new();
+        routings.extend(routing_specs);
+
         // Arc pack — spaces, sidebars, splits.
         let space_specs: Vec<SpaceSpec> =
             nami_core::space::compile(&ext_src).unwrap_or_default();
@@ -578,7 +609,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -612,6 +643,9 @@ impl SubstratePipeline {
             spaces.len(),
             sidebars.len(),
             splits.len(),
+            spoofs.len(),
+            dnses.len(),
+            routings.len(),
         );
 
         Self {
@@ -645,6 +679,9 @@ impl SubstratePipeline {
             space_state,
             sidebars,
             splits,
+            spoofs,
+            dnses,
+            routings,
             session_store,
             session_spec,
             wasm_agents,
@@ -685,6 +722,46 @@ impl SubstratePipeline {
             space_names,
             sidebar_names,
             split_names,
+            spoof_names,
+            dns_names,
+            routing_names,
+        }
+    }
+
+    // ── Privacy-pack accessors ───────────────────────────────────
+
+    #[must_use]
+    pub fn spoofs_list(&self) -> Vec<SpoofSpec> {
+        self.spoofs.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn spoof_for(&self, host: &str) -> Option<SpoofSpec> {
+        self.spoofs.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn dns_list(&self) -> Vec<DnsSpec> {
+        self.dnses.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn dns_get(&self, name: &str) -> Option<DnsSpec> {
+        self.dnses.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn routing_list(&self) -> Vec<RoutingSpec> {
+        self.routings.specs().to_vec()
+    }
+
+    /// Resolve the active route for `host`. Returns `(spec_name, RouteVia)`
+    /// pair — name is `None` when falling through to direct default.
+    #[must_use]
+    pub fn routing_for(&self, host: &str) -> (Option<String>, RouteVia) {
+        match self.routings.resolve(host) {
+            Some(spec) => (Some(spec.name.clone()), spec.parsed_via()),
+            None => (None, RouteVia::Direct),
         }
     }
 
@@ -1241,6 +1318,9 @@ impl SubstratePipeline {
             spaces: self.space_names.clone(),
             sidebars: self.sidebar_names.clone(),
             splits: self.split_names.clone(),
+            spoofs: self.spoof_names.clone(),
+            dnses: self.dns_names.clone(),
+            routings: self.routing_names.clone(),
         }
     }
 

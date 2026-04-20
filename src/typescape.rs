@@ -215,6 +215,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/sidebars", "List (defsidebar) apps; `?host=…` filters to visible-under."),
         mk("GET", "/splits", "Every (defsplit) layout."),
         mk("GET", "/splits/:name", "Full SplitSpec for one layout."),
+        mk("GET", "/spoofs", "Every (defspoof) fingerprint-resistance profile."),
+        mk("GET", "/spoof", "Resolved (defspoof) for `?host=…` (or 404)."),
+        mk("GET", "/dns", "Every (defdns) resolver profile."),
+        mk("GET", "/dns/:name", "Full DnsSpec for one resolver profile."),
+        mk("GET", "/routing", "Every (defrouting) rule."),
+        mk("GET", "/routing/resolve", "Resolved routing for `?host=…` (kind + target)."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -284,6 +290,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("sidebars_list", "List (defsidebar) apps, optionally by host."),
         mk("splits_list", "List all (defsplit) layouts."),
         mk("split_get", "Full SplitSpec for one layout."),
+        mk("spoofs_list", "List all (defspoof) profiles."),
+        mk("spoof_for", "Resolve (defspoof) for a host."),
+        mk("dns_list", "List all (defdns) resolver profiles."),
+        mk("dns_get", "Full DnsSpec for one resolver."),
+        mk("routing_list", "List all (defrouting) rules."),
+        mk("routing_resolve", "Resolved route for a host — kind + target."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -407,6 +419,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 34, "34 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 37, "37 DSL keywords expected in nami-core");
     }
 }

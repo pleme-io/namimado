@@ -109,6 +109,11 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct DnsNameRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SpaceNameRequest {
     name: String,
 }
@@ -751,6 +756,69 @@ impl NamimadoMcpServer {
                 req.name
             )))
         }
+    }
+
+    #[tool(description = "List every (defspoof) — fingerprint-resistance profile.")]
+    async fn spoofs_list(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.spoofs_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve the most-specific (defspoof) for a host.")]
+    async fn spoof_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.spoof_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_spoof_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defdns) resolver profile.")]
+    async fn dns_list(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.dns_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full DnsSpec for one resolver profile.")]
+    async fn dns_get(
+        &self,
+        Parameters(req): Parameters<DnsNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.dns_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "dns_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "List every (defrouting) rule.")]
+    async fn routing_list(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.routing_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Resolve the active route for a host — direct / tunnel / \
+                       tor / socks5 / pt / unknown, with strategy target."
+    )]
+    async fn routing_resolve(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let r = self.service.routing_resolve(&req.host);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&r).unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List every (defspace) — Arc-style grouped tabs with per-space state.")]

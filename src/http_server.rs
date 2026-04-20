@@ -22,7 +22,8 @@ use crate::api::{
     GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, JsEvalRequest,
     JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse, PipResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
-    SessionTabInfo, SnapshotRecipeResponse, SpaceActivateResponse, SpaceActiveResponse,
+    RoutingResolveResponse, SessionTabInfo, SnapshotRecipeResponse, SpaceActivateResponse,
+    SpaceActiveResponse,
     StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest,
     StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
@@ -69,6 +70,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/spoofs", get(handle_spoofs_list))
+        .route("/spoof", get(handle_spoof_for))
+        .route("/dns", get(handle_dns_list))
+        .route("/dns/:name", get(handle_dns_get))
+        .route("/routing", get(handle_routing_list))
+        .route("/routing/resolve", get(handle_routing_resolve))
         .route("/spaces", get(handle_spaces_list))
         .route("/spaces/active", get(handle_space_active).delete(handle_space_deactivate))
         .route("/spaces/:name", get(handle_space_get))
@@ -458,6 +465,57 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_spoofs_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.spoofs_list())
+}
+
+async fn handle_spoof_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.spoof_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_spoof_matches"),
+            )
+        })
+}
+
+async fn handle_dns_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.dns_list())
+}
+
+async fn handle_dns_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.dns_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("dns_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_routing_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.routing_list())
+}
+
+async fn handle_routing_resolve(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<RoutingResolveResponse> {
+    Json(svc.routing_resolve(&q.host.unwrap_or_default()))
 }
 
 async fn handle_spaces_list(
