@@ -1731,6 +1731,41 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn time_travel_applicable(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
 
+    // ── Locale ───────────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn locale_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .locale_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn locale_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .locale_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn locale_headers_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.locale_headers_for(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn locale_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn locale_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn locale_headers_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3853,6 +3888,16 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn locale_default_is_passthrough() {
+        let svc = NamimadoService::new();
+        assert!(!svc.locale_list().is_empty());
+        let headers = svc.locale_headers_for("example.com").unwrap();
+        // Default passthrough: everything empty.
+        assert_eq!(headers["accept_language"], "");
+        assert_eq!(headers["primary"], "");
     }
 
     #[test]

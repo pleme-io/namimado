@@ -352,6 +352,9 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/time-travel", "Every (deftime-travel) profile (privacy-first)."),
         mk("GET", "/time-travel/:name", "Full TimeTravelSpec by name."),
         mk("GET", "/time-travel/applicable", "Time-travel profiles applicable to `?host=…`."),
+        mk("GET", "/locale", "Every (deflocale) profile."),
+        mk("GET", "/locale/resolve", "Locale profile for `?host=…`."),
+        mk("GET", "/locale/headers", "Rendered {accept_language, primary, languages, timezone} for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -558,6 +561,9 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("time_travel_list", "Every (deftime-travel) profile."),
         mk("time_travel_get", "Full TimeTravelSpec by name."),
         mk("time_travel_applicable", "Time-travel profiles applicable to a host."),
+        mk("locale_list", "Every (deflocale) profile."),
+        mk("locale_for", "Locale profile for a host."),
+        mk("locale_headers", "Rendered locale headers for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -681,6 +687,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 97, "97 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 98, "98 DSL keywords expected in nami-core");
     }
 }

@@ -278,6 +278,7 @@ pub struct RulesInventory {
     pub csp_policies: Vec<String>,
     pub network_throttles: Vec<String>,
     pub time_travels: Vec<String>,
+    pub locales: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

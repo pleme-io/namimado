@@ -94,6 +94,7 @@ use nami_core::viewport::{ViewportRegistry, ViewportSpec};
 use nami_core::csp_policy::{CspPolicyRegistry, CspPolicySpec};
 use nami_core::network_throttle::{NetworkThrottleRegistry, NetworkThrottleSpec};
 use nami_core::time_travel::{TimeTravelRegistry, TimeTravelSpec};
+use nami_core::locale::{LocaleRegistry, LocaleSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -299,6 +300,7 @@ pub struct SubstratePipeline {
     csp_policies: CspPolicyRegistry,
     network_throttles: NetworkThrottleRegistry,
     time_travels: TimeTravelRegistry,
+    locales: LocaleRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -407,6 +409,7 @@ pub struct SubstratePipeline {
     csp_policy_names: Vec<String>,
     network_throttle_names: Vec<String>,
     time_travel_names: Vec<String>,
+    locale_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1158,6 +1161,21 @@ impl SubstratePipeline {
         let mut time_travels = TimeTravelRegistry::new();
         time_travels.extend(time_travel_specs);
 
+        // Locale — per-host Accept-Language / navigator.language override.
+        let locale_specs: Vec<LocaleSpec> =
+            nami_core::locale::compile(&ext_src).unwrap_or_default();
+        let locale_names: Vec<String> = if locale_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            locale_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut locales = LocaleRegistry::new();
+        if locale_specs.is_empty() {
+            locales.insert(LocaleSpec::default_profile());
+        } else {
+            locales.extend(locale_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1500,7 +1518,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1597,6 +1615,7 @@ impl SubstratePipeline {
             csp_policies.len(),
             network_throttles.len(),
             time_travels.len(),
+            locales.len(),
         );
 
         Self {
@@ -1694,6 +1713,7 @@ impl SubstratePipeline {
             csp_policies,
             network_throttles,
             time_travels,
+            locales,
             session_store,
             session_spec,
             wasm_agents,
@@ -1797,6 +1817,7 @@ impl SubstratePipeline {
             csp_policy_names,
             network_throttle_names,
             time_travel_names,
+            locale_names,
         }
     }
 
@@ -2338,6 +2359,31 @@ impl SubstratePipeline {
             .into_iter()
             .cloned()
             .collect()
+    }
+
+    // ── Locale override ──────────────────────────────────────────
+
+    #[must_use]
+    pub fn locale_list(&self) -> Vec<LocaleSpec> {
+        self.locales.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn locale_for(&self, host: &str) -> Option<LocaleSpec> {
+        self.locales.resolve(host).cloned()
+    }
+
+    /// {accept_language, primary, languages} headers for `host`.
+    #[must_use]
+    pub fn locale_headers_for(&self, host: &str) -> Option<serde_json::Value> {
+        self.locales.resolve(host).map(|s| {
+            serde_json::json!({
+                "accept_language": s.render_accept_language(),
+                "primary": s.primary_tag(),
+                "languages": s.js_languages(),
+                "timezone": s.timezone,
+            })
+        })
     }
 
     /// {download_kbps, upload_kbps, latency_ms, admits} for `host`.
@@ -3364,6 +3410,7 @@ impl SubstratePipeline {
             csp_policies: self.csp_policy_names.clone(),
             network_throttles: self.network_throttle_names.clone(),
             time_travels: self.time_travel_names.clone(),
+            locales: self.locale_names.clone(),
         }
     }
 

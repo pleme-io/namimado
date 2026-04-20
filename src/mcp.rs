@@ -1752,6 +1752,35 @@ impl NamimadoMcpServer {
         ))
     }
 
+    #[tool(description = "List every (deflocale) profile.")]
+    async fn locale_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.locale_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved locale profile for a host.")]
+    async fn locale_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.locale_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_locale_matches")),
+        }
+    }
+
+    #[tool(description = "Rendered {accept_language, primary, languages, timezone} for a host.")]
+    async fn locale_headers(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.locale_headers_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_locale_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

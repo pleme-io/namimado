@@ -216,6 +216,9 @@ pub fn router(service: NamimadoService) -> Router {
             "/time-travel/applicable",
             get(handle_time_travel_applicable),
         )
+        .route("/locale", get(handle_locale_list))
+        .route("/locale/resolve", get(handle_locale_for))
+        .route("/locale/headers", get(handle_locale_headers))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1565,6 +1568,40 @@ async fn handle_time_travel_applicable(
     Query(q): Query<HostQuery>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.time_travel_applicable(&q.host.unwrap_or_default()))
+}
+
+async fn handle_locale_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.locale_list())
+}
+
+async fn handle_locale_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.locale_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_locale_matches"),
+            )
+        })
+}
+
+async fn handle_locale_headers(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.locale_headers_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_locale_matches"),
+            )
+        })
 }
 
 async fn handle_inspector_list(
