@@ -201,6 +201,12 @@ struct BangDetectRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct IdentityRequest {
+    /// Identity name (e.g. "work", "personal").
+    identity: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SyncSignalRequest {
     /// One of: bookmarks, history, tabs, open-windows, passwords,
     /// passkeys, sessions, extensions, settings, reading-list,
@@ -1085,6 +1091,85 @@ impl NamimadoMcpServer {
         match self.service.search_bang_detect(&req.input) {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_search_bang_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defidentity) persona.")]
+    async fn identity_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.identity_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full IdentitySpec for one persona by name.")]
+    async fn identity_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.identity_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "identity_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Active identity for a host (auto-apply match → default → first-enabled).")]
+    async fn identity_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.identity_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_identity_matches")),
+        }
+    }
+
+    #[tool(description = "List every (deftotp) profile (secrets redacted only in the caller's display layer).")]
+    async fn totp_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.totp_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full TotpSpec for one profile by name.")]
+    async fn totp_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.totp_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "totp_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Every (deftotp) profile linked to a named identity.")]
+    async fn totp_for_identity(
+        &self,
+        Parameters(req): Parameters<IdentityRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.totp_for_identity(&req.identity))
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Current TOTP code + seconds-remaining for a profile (RFC 6238).")]
+    async fn totp_code(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.totp_code(&req.name) {
+            Some(Ok(v)) => Ok(ToolResponse::success(&v)),
+            Some(Err(e)) => Ok(ToolResponse::error(&format!("totp_generate_failed: {e}"))),
+            None => Ok(ToolResponse::error(&format!(
+                "totp_unknown: {}",
+                req.name
+            ))),
         }
     }
 

@@ -73,6 +73,8 @@ use nami_core::tab_hibernate::{TabHibernateRegistry, TabHibernateSpec};
 use nami_core::tab_preview::{TabPreviewRegistry, TabPreviewSpec};
 use nami_core::search_engine::{SearchEngineRegistry, SearchEngineSpec};
 use nami_core::search_bang::{SearchBangRegistry, SearchBangSpec};
+use nami_core::identity::{IdentityRegistry, IdentitySpec};
+use nami_core::totp::{TotpRegistry, TotpSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -257,6 +259,8 @@ pub struct SubstratePipeline {
     tab_previews: TabPreviewRegistry,
     search_engines: SearchEngineRegistry,
     search_bangs: SearchBangRegistry,
+    identities: IdentityRegistry,
+    totps: TotpRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -344,6 +348,8 @@ pub struct SubstratePipeline {
     tab_preview_names: Vec<String>,
     search_engine_names: Vec<String>,
     search_bang_triggers: Vec<String>,
+    identity_names: Vec<String>,
+    totp_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -791,6 +797,28 @@ impl SubstratePipeline {
             search_bangs.extend(search_bang_specs);
         }
 
+        // Identity pack — multi-account personas + TOTP 2FA codes.
+        let identity_specs: Vec<IdentitySpec> =
+            nami_core::identity::compile(&ext_src).unwrap_or_default();
+        let identity_names: Vec<String> = if identity_specs.is_empty() {
+            vec!["personal".to_owned()]
+        } else {
+            identity_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut identities = IdentityRegistry::new();
+        if identity_specs.is_empty() {
+            identities.insert(IdentitySpec::default_profile());
+        } else {
+            identities.extend(identity_specs);
+        }
+
+        let totp_specs: Vec<TotpSpec> =
+            nami_core::totp::compile(&ext_src).unwrap_or_default();
+        let totp_names: Vec<String> =
+            totp_specs.iter().map(|s| s.name.clone()).collect();
+        let mut totps = TotpRegistry::new();
+        totps.extend(totp_specs);
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1133,7 +1161,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1209,6 +1237,8 @@ impl SubstratePipeline {
             tab_previews.len(),
             search_engines.len(),
             search_bangs.len(),
+            identities.len(),
+            totps.len(),
         );
 
         Self {
@@ -1285,6 +1315,8 @@ impl SubstratePipeline {
             tab_previews,
             search_engines,
             search_bangs,
+            identities,
+            totps,
             session_store,
             session_spec,
             wasm_agents,
@@ -1367,6 +1399,8 @@ impl SubstratePipeline {
             tab_preview_names,
             search_engine_names,
             search_bang_triggers,
+            identity_names,
+            totp_names,
         }
     }
 
@@ -1527,6 +1561,45 @@ impl SubstratePipeline {
         self.search_bangs
             .detect(input)
             .map(|m| (m.spec.clone(), m.remaining.to_owned()))
+    }
+
+    // ── Identity pack ────────────────────────────────────────────
+
+    #[must_use]
+    pub fn identity_list(&self) -> Vec<IdentitySpec> {
+        self.identities.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn identity_get(&self, name: &str) -> Option<IdentitySpec> {
+        self.identities.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn identity_for(&self, host: &str) -> Option<IdentitySpec> {
+        self.identities.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn totp_list(&self) -> Vec<TotpSpec> {
+        self.totps.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn totp_get(&self, name: &str) -> Option<TotpSpec> {
+        self.totps.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn totp_for_identity(&self, identity: &str) -> Vec<TotpSpec> {
+        self.totps.for_identity(identity).into_iter().cloned().collect()
+    }
+
+    /// Generate the current TOTP code for a named profile.
+    pub fn totp_code(&self, name: &str) -> Option<Result<String, String>> {
+        self.totps
+            .get(name)
+            .map(|s| s.generate_now().map_err(|e| e.to_string()))
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2516,6 +2589,8 @@ impl SubstratePipeline {
             tab_previews: self.tab_preview_names.clone(),
             search_engines: self.search_engine_names.clone(),
             search_bangs: self.search_bang_triggers.clone(),
+            identities: self.identity_names.clone(),
+            totps: self.totp_names.clone(),
         }
     }
 

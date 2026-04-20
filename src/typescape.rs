@@ -294,6 +294,13 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/search-engine/by-keyword/:keyword", "Search engine for an omnibox keyword."),
         mk("GET", "/search-bang", "Every (defsearch-bang) shortcut."),
         mk("GET", "/search-bang/detect", "Detect a !bang in `?input=…`; returns {spec, remaining}."),
+        mk("GET", "/identity", "Every (defidentity) persona."),
+        mk("GET", "/identity/resolve", "Active identity for `?host=…`."),
+        mk("GET", "/identity/:name", "Full IdentitySpec for one persona."),
+        mk("GET", "/totp", "Every (deftotp) profile."),
+        mk("GET", "/totp/:name", "Full TotpSpec for one profile."),
+        mk("GET", "/totp/:name/code", "Current TOTP code + seconds-remaining."),
+        mk("GET", "/totp/for-identity/:identity", "All TOTP profiles linked to a named identity."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -442,6 +449,13 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("search_engine_default", "The current default search engine."),
         mk("search_bang_list", "Every (defsearch-bang) shortcut."),
         mk("search_bang_detect", "Detect a !bang in input; returns {spec, remaining}."),
+        mk("identity_list", "Every (defidentity) persona."),
+        mk("identity_get", "Full IdentitySpec for one persona by name."),
+        mk("identity_for", "Active identity for a host."),
+        mk("totp_list", "Every (deftotp) profile."),
+        mk("totp_get", "Full TotpSpec for one profile by name."),
+        mk("totp_for_identity", "All TOTP profiles linked to a named identity."),
+        mk("totp_code", "Current TOTP code + seconds-remaining for a profile."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -565,6 +579,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 76, "76 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 78, "78 DSL keywords expected in nami-core");
     }
 }

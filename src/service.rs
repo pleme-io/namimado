@@ -956,6 +956,102 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn search_bang_detect(&self, _i: &str) -> Option<serde_json::Value> { None }
 
+    // ── Identity pack ────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn identity_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .identity_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn identity_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .identity_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn identity_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .identity_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn totp_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .totp_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn totp_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .totp_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn totp_for_identity(&self, identity: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .totp_for_identity(identity)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    /// Current code + seconds-remaining for a named TOTP profile.
+    /// Returns None when the profile doesn't exist; Err(reason) when
+    /// the profile exists but fails (bad secret, bad digits).
+    #[cfg(feature = "browser-core")]
+    pub fn totp_code(&self, name: &str) -> Option<Result<serde_json::Value, String>> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let spec = inner.pipeline.totp_get(name)?;
+        drop(inner);
+        let result = spec.generate_now().map(|code| {
+            serde_json::json!({
+                "code": code,
+                "seconds_remaining": spec.seconds_remaining_now(),
+                "digits": spec.digits,
+                "period": spec.period,
+            })
+        }).map_err(|e| e.to_string());
+        Some(result)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn identity_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn identity_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn identity_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn totp_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn totp_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn totp_for_identity(&self, _i: &str) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn totp_code(&self, _n: &str) -> Option<Result<serde_json::Value, String>> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3001,6 +3097,17 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn identity_pack_auto_registers_default_identity_only() {
+        let svc = NamimadoService::new();
+        // Identity auto-registers a default persona; TOTP does NOT
+        // (secrets are inherently user-specific).
+        assert!(!svc.identity_list().is_empty());
+        assert!(svc.identity_for("example.com").is_some());
+        assert!(svc.totp_list().is_empty());
+        assert!(svc.totp_code("anything").is_none());
     }
 
     #[test]

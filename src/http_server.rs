@@ -110,6 +110,13 @@ pub fn router(service: NamimadoService) -> Router {
         )
         .route("/search-bang", get(handle_search_bang_list))
         .route("/search-bang/detect", get(handle_search_bang_detect))
+        .route("/identity", get(handle_identity_list))
+        .route("/identity/resolve", get(handle_identity_for))
+        .route("/identity/:name", get(handle_identity_get))
+        .route("/totp", get(handle_totp_list))
+        .route("/totp/:name", get(handle_totp_get))
+        .route("/totp/:name/code", get(handle_totp_code))
+        .route("/totp/for-identity/:identity", get(handle_totp_for_identity))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -836,6 +843,80 @@ async fn handle_search_bang_detect(
                 ApiError::new("no_search_bang_matches"),
             )
         })
+}
+
+async fn handle_identity_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.identity_list())
+}
+
+async fn handle_identity_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.identity_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("identity_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_identity_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.identity_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_identity_matches"),
+            )
+        })
+}
+
+async fn handle_totp_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.totp_list())
+}
+
+async fn handle_totp_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.totp_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("totp_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_totp_code(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    match svc.totp_code(&name) {
+        Some(Ok(v)) => Ok(Json(v)),
+        Some(Err(e)) => Err(ApiErrorResponse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::new("totp_generate_failed").with_detail(e),
+        )),
+        None => Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("totp_unknown").with_detail(name),
+        )),
+    }
+}
+
+async fn handle_totp_for_identity(
+    State(svc): State<NamimadoService>,
+    Path(identity): Path<String>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.totp_for_identity(&identity))
 }
 
 async fn handle_inspector_list(
