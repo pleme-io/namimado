@@ -1871,6 +1871,41 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn smart_bookmark_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Text spacing (WCAG 1.4.12) ───────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn text_spacing_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .text_spacing_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn text_spacing_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .text_spacing_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn text_spacing_css(&self, host: &str) -> Option<String> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.text_spacing_css(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn text_spacing_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn text_spacing_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn text_spacing_css(&self, _h: &str) -> Option<String> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -4006,6 +4041,15 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn text_spacing_default_is_wcag_compliant() {
+        let svc = NamimadoService::new();
+        assert!(!svc.text_spacing_list().is_empty());
+        let css = svc.text_spacing_css("example.com").unwrap();
+        assert!(css.contains("line-height: 1.5"));
+        assert!(css.contains("!important"));
     }
 
     #[test]

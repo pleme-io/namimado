@@ -1868,6 +1868,37 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (deftext-spacing) profile.")]
+    async fn text_spacing_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.text_spacing_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved text-spacing profile for a host.")]
+    async fn text_spacing_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.text_spacing_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_text_spacing_matches")),
+        }
+    }
+
+    #[tool(description = "Rendered CSS stylesheet for a host's text-spacing profile ({css: \"...\"}).")]
+    async fn text_spacing_css(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.text_spacing_css(&req.host) {
+            Some(css) => Ok(ToolResponse::success(&serde_json::json!({
+                "css": css,
+            }))),
+            None => Ok(ToolResponse::error("no_text_spacing_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
