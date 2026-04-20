@@ -219,6 +219,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/locale", get(handle_locale_list))
         .route("/locale/resolve", get(handle_locale_for))
         .route("/locale/headers", get(handle_locale_headers))
+        .route("/tab-macro", get(handle_tab_macro_list))
+        .route("/tab-macro/:name", get(handle_tab_macro_get))
+        .route(
+            "/tab-macro/by-trigger/:trigger",
+            get(handle_tab_macro_by_trigger),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1602,6 +1608,31 @@ async fn handle_locale_headers(
                 ApiError::new("no_locale_matches"),
             )
         })
+}
+
+async fn handle_tab_macro_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_macro_list())
+}
+
+async fn handle_tab_macro_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.tab_macro_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("tab_macro_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_tab_macro_by_trigger(
+    State(svc): State<NamimadoService>,
+    Path(trigger): Path<String>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_macro_by_trigger(&trigger))
 }
 
 async fn handle_inspector_list(

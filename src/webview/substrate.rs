@@ -95,6 +95,7 @@ use nami_core::csp_policy::{CspPolicyRegistry, CspPolicySpec};
 use nami_core::network_throttle::{NetworkThrottleRegistry, NetworkThrottleSpec};
 use nami_core::time_travel::{TimeTravelRegistry, TimeTravelSpec};
 use nami_core::locale::{LocaleRegistry, LocaleSpec};
+use nami_core::tab_macro::{TabMacroRegistry, TabMacroSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -301,6 +302,7 @@ pub struct SubstratePipeline {
     network_throttles: NetworkThrottleRegistry,
     time_travels: TimeTravelRegistry,
     locales: LocaleRegistry,
+    tab_macros: TabMacroRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -410,6 +412,7 @@ pub struct SubstratePipeline {
     network_throttle_names: Vec<String>,
     time_travel_names: Vec<String>,
     locale_names: Vec<String>,
+    tab_macro_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1176,6 +1179,15 @@ impl SubstratePipeline {
             locales.extend(locale_specs);
         }
 
+        // Tab-macro (novel) — destructive-capable; only user specs
+        // register. No auto-default.
+        let tab_macro_specs: Vec<TabMacroSpec> =
+            nami_core::tab_macro::compile(&ext_src).unwrap_or_default();
+        let tab_macro_names: Vec<String> =
+            tab_macro_specs.iter().map(|s| s.name.clone()).collect();
+        let mut tab_macros = TabMacroRegistry::new();
+        tab_macros.extend(tab_macro_specs);
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1518,7 +1530,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1616,6 +1628,7 @@ impl SubstratePipeline {
             network_throttles.len(),
             time_travels.len(),
             locales.len(),
+            tab_macros.len(),
         );
 
         Self {
@@ -1714,6 +1727,7 @@ impl SubstratePipeline {
             network_throttles,
             time_travels,
             locales,
+            tab_macros,
             session_store,
             session_spec,
             wasm_agents,
@@ -1818,6 +1832,7 @@ impl SubstratePipeline {
             network_throttle_names,
             time_travel_names,
             locale_names,
+            tab_macro_names,
         }
     }
 
@@ -2371,6 +2386,30 @@ impl SubstratePipeline {
     #[must_use]
     pub fn locale_for(&self, host: &str) -> Option<LocaleSpec> {
         self.locales.resolve(host).cloned()
+    }
+
+    // ── Tab macro (novel) ────────────────────────────────────────
+
+    #[must_use]
+    pub fn tab_macro_list(&self) -> Vec<TabMacroSpec> {
+        self.tab_macros.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn tab_macro_get(&self, name: &str) -> Option<TabMacroSpec> {
+        self.tab_macros.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn tab_macro_by_trigger(
+        &self,
+        trigger: nami_core::tab_macro::Trigger,
+    ) -> Vec<TabMacroSpec> {
+        self.tab_macros
+            .by_trigger(trigger)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3411,6 +3450,7 @@ impl SubstratePipeline {
             network_throttles: self.network_throttle_names.clone(),
             time_travels: self.time_travel_names.clone(),
             locales: self.locale_names.clone(),
+            tab_macros: self.tab_macro_names.clone(),
         }
     }
 

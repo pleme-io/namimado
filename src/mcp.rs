@@ -229,6 +229,12 @@ struct PermissionDecideRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct TriggerRequest {
+    /// Kebab-case trigger (command, hotkey, omnibox, auto-match, periodic).
+    trigger: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct EventKindRequest {
     /// Kebab-case event kind (rc-reload, permission-grant, totp-read, …).
     event: String,
@@ -1779,6 +1785,38 @@ impl NamimadoMcpServer {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_locale_matches")),
         }
+    }
+
+    #[tool(description = "List every (deftab-macro) (privacy-first — empty until user opts in).")]
+    async fn tab_macro_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.tab_macro_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full TabMacroSpec for one macro by name.")]
+    async fn tab_macro_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.tab_macro_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "tab_macro_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Tab-macros bound to a given trigger (command/hotkey/omnibox/auto-match/periodic).")]
+    async fn tab_macro_by_trigger(
+        &self,
+        Parameters(req): Parameters<TriggerRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.tab_macro_by_trigger(&req.trigger))
+                .unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List every (definspector) panel.")]

@@ -1766,6 +1766,49 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn locale_headers_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Tab macro (novel) ────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_macro_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .tab_macro_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_macro_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .tab_macro_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_macro_by_trigger(&self, trigger: &str) -> Vec<serde_json::Value> {
+        let Some(t) = parse_tab_macro_trigger(trigger) else {
+            return Vec::new();
+        };
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .tab_macro_by_trigger(t)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_macro_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_macro_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_macro_by_trigger(&self, _t: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3378,6 +3421,19 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+fn parse_tab_macro_trigger(s: &str) -> Option<nami_core::tab_macro::Trigger> {
+    use nami_core::tab_macro::Trigger::*;
+    Some(match s {
+        "command" => Command,
+        "hotkey" => Hotkey,
+        "omnibox" => Omnibox,
+        "auto-match" => AutoMatch,
+        "periodic" => Periodic,
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_event_kind(s: &str) -> Option<nami_core::audit_trail::EventKind> {
     use nami_core::audit_trail::EventKind::*;
     Some(match s {
@@ -3888,6 +3944,15 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn tab_macro_defaults_off_destructive_capable() {
+        let svc = NamimadoService::new();
+        // Destructive-capable novel DSL — nothing auto-registers.
+        assert!(svc.tab_macro_list().is_empty());
+        assert!(svc.tab_macro_by_trigger("command").is_empty());
+        assert!(svc.tab_macro_by_trigger("bogus").is_empty());
     }
 
     #[test]
