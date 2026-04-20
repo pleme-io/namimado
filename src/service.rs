@@ -761,6 +761,49 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn service_worker_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── (defsync) cross-device replication ───────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn sync_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .sync_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn sync_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .sync_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn sync_for_signal(&self, signal: &str) -> Vec<serde_json::Value> {
+        let Some(kind) = parse_sync_signal(signal) else {
+            return Vec::new();
+        };
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .sync_for_signal(kind)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn sync_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn sync_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn sync_for_signal(&self, _s: &str) -> Vec<serde_json::Value> { Vec::new() }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2372,6 +2415,27 @@ fn disabled_response() -> LlmResponseDto {
     }
 }
 
+#[cfg(feature = "browser-core")]
+fn parse_sync_signal(s: &str) -> Option<nami_core::sync_channel::SyncSignal> {
+    use nami_core::sync_channel::SyncSignal::*;
+    Some(match s {
+        "bookmarks" => Bookmarks,
+        "history" => History,
+        "tabs" => Tabs,
+        "open-windows" => OpenWindows,
+        "passwords" => Passwords,
+        "passkeys" => Passkeys,
+        "sessions" => Sessions,
+        "extensions" => Extensions,
+        "settings" => Settings,
+        "reading-list" => ReadingList,
+        "annotations" => Annotations,
+        "downloads" => Downloads,
+        "custom" => Custom,
+        _ => return None,
+    })
+}
+
 fn compile_features() -> Vec<String> {
     let mut out = Vec::new();
     if cfg!(feature = "browser-core") {
@@ -2785,6 +2849,17 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn sync_auto_registers_default_bookmarks_profile() {
+        let svc = NamimadoService::new();
+        assert!(!svc.sync_list().is_empty());
+        assert!(svc.sync_get("default-bookmarks").is_some());
+        // Filter-by-signal picks up the default bookmarks profile.
+        assert!(!svc.sync_for_signal("bookmarks").is_empty());
+        // Unknown signal names return empty.
+        assert!(svc.sync_for_signal("bogus").is_empty());
     }
 
     #[test]

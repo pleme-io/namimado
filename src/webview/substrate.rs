@@ -67,6 +67,7 @@ use nami_core::crdt_room::{CrdtRoomRegistry, CrdtRoomSpec};
 use nami_core::multiplayer_cursor::{MultiplayerCursorRegistry, MultiplayerCursorSpec};
 use nami_core::presence::{PresenceRegistry, PresenceSpec};
 use nami_core::service_worker::{ServiceWorkerRegistry, ServiceWorkerSpec};
+use nami_core::sync_channel::{SyncRegistry, SyncSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -245,6 +246,7 @@ pub struct SubstratePipeline {
     crdt_rooms: CrdtRoomRegistry,
     multiplayer_cursors: MultiplayerCursorRegistry,
     service_workers: ServiceWorkerRegistry,
+    syncs: SyncRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -326,6 +328,7 @@ pub struct SubstratePipeline {
     crdt_room_names: Vec<String>,
     multiplayer_cursor_names: Vec<String>,
     service_worker_names: Vec<String>,
+    sync_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -686,6 +689,21 @@ impl SubstratePipeline {
             service_workers.extend(service_worker_specs);
         }
 
+        // (defsync) — cross-device replication channels.
+        let sync_specs: Vec<SyncSpec> =
+            nami_core::sync_channel::compile(&ext_src).unwrap_or_default();
+        let sync_names: Vec<String> = if sync_specs.is_empty() {
+            vec!["default-bookmarks".to_owned()]
+        } else {
+            sync_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut syncs = SyncRegistry::new();
+        if sync_specs.is_empty() {
+            syncs.insert(SyncSpec::default_profile());
+        } else {
+            syncs.extend(sync_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1028,7 +1046,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1098,6 +1116,7 @@ impl SubstratePipeline {
             crdt_rooms.len(),
             multiplayer_cursors.len(),
             service_workers.len(),
+            syncs.len(),
         );
 
         Self {
@@ -1168,6 +1187,7 @@ impl SubstratePipeline {
             crdt_rooms,
             multiplayer_cursors,
             service_workers,
+            syncs,
             session_store,
             session_spec,
             wasm_agents,
@@ -1244,6 +1264,7 @@ impl SubstratePipeline {
             crdt_room_names,
             multiplayer_cursor_names,
             service_worker_names,
+            sync_names,
         }
     }
 
@@ -1321,6 +1342,23 @@ impl SubstratePipeline {
     #[must_use]
     pub fn service_worker_for(&self, host: &str) -> Option<ServiceWorkerSpec> {
         self.service_workers.resolve(host).cloned()
+    }
+
+    // ── (defsync) cross-device replication ───────────────────────
+
+    #[must_use]
+    pub fn sync_list(&self) -> Vec<SyncSpec> {
+        self.syncs.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn sync_get(&self, name: &str) -> Option<SyncSpec> {
+        self.syncs.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn sync_for_signal(&self, signal: nami_core::sync_channel::SyncSignal) -> Vec<SyncSpec> {
+        self.syncs.for_signal(signal).into_iter().cloned().collect()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2304,6 +2342,7 @@ impl SubstratePipeline {
             crdt_rooms: self.crdt_room_names.clone(),
             multiplayer_cursors: self.multiplayer_cursor_names.clone(),
             service_workers: self.service_worker_names.clone(),
+            syncs: self.sync_names.clone(),
         }
     }
 

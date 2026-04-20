@@ -189,6 +189,14 @@ struct HostOnlyRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct SyncSignalRequest {
+    /// One of: bookmarks, history, tabs, open-windows, passwords,
+    /// passkeys, sessions, extensions, settings, reading-list,
+    /// annotations, downloads, custom.
+    signal: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SnapshotRecipeToolRequest {
     host: String,
     name: Option<String>,
@@ -925,6 +933,35 @@ impl NamimadoMcpServer {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_service_worker_matches")),
         }
+    }
+
+    #[tool(description = "List every (defsync) channel.")]
+    async fn sync_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.sync_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SyncSpec for one (defsync) channel by name.")]
+    async fn sync_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.sync_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!("sync_unknown: {}", req.name))),
+        }
+    }
+
+    #[tool(description = "Every (defsync) channel syncing a given signal kind (bookmarks, history, tabs, …).")]
+    async fn sync_for_signal(
+        &self,
+        Parameters(req): Parameters<SyncSignalRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.sync_for_signal(&req.signal))
+                .unwrap_or_default(),
+        ))
     }
 
     #[tool(description = "List every (definspector) panel.")]

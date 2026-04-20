@@ -92,6 +92,9 @@ pub fn router(service: NamimadoService) -> Router {
             "/service-worker/resolve",
             get(handle_service_worker_for),
         )
+        .route("/sync", get(handle_sync_list))
+        .route("/sync/:name", get(handle_sync_get))
+        .route("/sync/by-signal/:signal", get(handle_sync_for_signal))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -667,6 +670,31 @@ async fn handle_service_worker_for(
                 ApiError::new("no_service_worker_matches"),
             )
         })
+}
+
+async fn handle_sync_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.sync_list())
+}
+
+async fn handle_sync_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.sync_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("sync_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_sync_for_signal(
+    State(svc): State<NamimadoService>,
+    Path(signal): Path<String>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.sync_for_signal(&signal))
 }
 
 async fn handle_inspector_list(
