@@ -909,6 +909,24 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defservice-worker) profile.")]
+    async fn service_worker_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.service_worker_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved service-worker profile for a host.")]
+    async fn service_worker_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.service_worker_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_service_worker_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

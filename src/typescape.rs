@@ -277,6 +277,8 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/crdt-room/resolve", "CRDT-room profile for `?host=…`."),
         mk("GET", "/multiplayer-cursor", "Every (defmultiplayer-cursor) profile."),
         mk("GET", "/multiplayer-cursor/resolve", "Multiplayer-cursor profile for `?host=…`."),
+        mk("GET", "/service-worker", "Every (defservice-worker) profile."),
+        mk("GET", "/service-worker/resolve", "Service-worker profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -408,6 +410,8 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("crdt_room_for", "CRDT-room profile for a host."),
         mk("multiplayer_cursor_list", "Every (defmultiplayer-cursor) profile."),
         mk("multiplayer_cursor_for", "Multiplayer-cursor profile for a host."),
+        mk("service_worker_list", "Every (defservice-worker) profile."),
+        mk("service_worker_for", "Service-worker profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -531,6 +535,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 69, "69 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 70, "70 DSL keywords expected in nami-core");
     }
 }

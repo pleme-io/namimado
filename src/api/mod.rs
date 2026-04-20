@@ -250,6 +250,7 @@ pub struct RulesInventory {
     pub presences: Vec<String>,
     pub crdt_rooms: Vec<String>,
     pub multiplayer_cursors: Vec<String>,
+    pub service_workers: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

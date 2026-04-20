@@ -87,6 +87,11 @@ pub fn router(service: NamimadoService) -> Router {
             "/multiplayer-cursor/resolve",
             get(handle_multiplayer_cursor_for),
         )
+        .route("/service-worker", get(handle_service_worker_list))
+        .route(
+            "/service-worker/resolve",
+            get(handle_service_worker_for),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -640,6 +645,26 @@ async fn handle_multiplayer_cursor_for(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_multiplayer_cursor_matches"),
+            )
+        })
+}
+
+async fn handle_service_worker_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.service_worker_list())
+}
+
+async fn handle_service_worker_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.service_worker_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_service_worker_matches"),
             )
         })
 }
