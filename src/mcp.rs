@@ -229,6 +229,25 @@ struct PermissionDecideRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct HistoryRecordRequest {
+    host: String,
+    url: String,
+    #[serde(default)]
+    dwell_seconds: u32,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct NavigationDecideRequest {
+    host: String,
+    /// Kebab-case click source.
+    click_source: String,
+    #[serde(default)]
+    same_origin: bool,
+    #[serde(default)]
+    had_user_gesture: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SyncSignalRequest {
     /// One of: bookmarks, history, tabs, open-windows, passwords,
     /// passkeys, sessions, extensions, settings, reading-list,
@@ -1453,6 +1472,75 @@ impl NamimadoMcpServer {
             &serde_json::to_value(&self.service.prerender_rules_for(&req.host))
                 .unwrap_or_default(),
         ))
+    }
+
+    #[tool(description = "List every (defhistory-policy) profile.")]
+    async fn history_policy_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.history_policy_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved history policy for a host.")]
+    async fn history_policy_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.history_policy_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_history_policy_matches")),
+        }
+    }
+
+    #[tool(description = "Whether (host, url, dwell_seconds) should be recorded in history.")]
+    async fn history_should_record(
+        &self,
+        Parameters(req): Parameters<HistoryRecordRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.history_should_record(&req.host, &req.url, req.dwell_seconds) {
+            Some(b) => Ok(ToolResponse::success(&serde_json::json!({
+                "should_record": b,
+            }))),
+            None => Ok(ToolResponse::error("no_history_policy_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defnavigation-intent) profile.")]
+    async fn navigation_intent_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.navigation_intent_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved navigation-intent profile for a host.")]
+    async fn navigation_intent_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.navigation_intent_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_navigation_intent_matches")),
+        }
+    }
+
+    #[tool(description = "Decide OpenDisposition for a click. click_source: link-click/middle-click/cmd-click/cmd-shift-click/script-open/form-target-blank/anchor-target-blank/drag-drop/omnibox/back-forward/reload/keyboard-shortcut.")]
+    async fn navigation_decide(
+        &self,
+        Parameters(req): Parameters<NavigationDecideRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.navigation_resolve(
+            &req.host,
+            &req.click_source,
+            req.same_origin,
+            req.had_user_gesture,
+        ) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "click_source_unknown: {}",
+                req.click_source
+            ))),
+        }
     }
 
     #[tool(description = "List every (definspector) panel.")]

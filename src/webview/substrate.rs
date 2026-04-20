@@ -85,6 +85,8 @@ use nami_core::permission_prompt::{PermissionPromptRegistry, PermissionPromptSpe
 use nami_core::resource_hint::{ResourceHintRegistry, ResourceHintSpec};
 use nami_core::bfcache_policy::{BfcachePolicyRegistry, BfcachePolicySpec};
 use nami_core::prerender_rule::{PrerenderRuleRegistry, PrerenderRuleSpec};
+use nami_core::history_policy::{HistoryPolicyRegistry, HistoryPolicySpec};
+use nami_core::navigation_intent::{NavigationIntentRegistry, NavigationIntentSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -281,6 +283,8 @@ pub struct SubstratePipeline {
     resource_hints: ResourceHintRegistry,
     bfcache_policies: BfcachePolicyRegistry,
     prerender_rules: PrerenderRuleRegistry,
+    history_policies: HistoryPolicyRegistry,
+    navigation_intents: NavigationIntentRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -380,6 +384,8 @@ pub struct SubstratePipeline {
     resource_hint_names: Vec<String>,
     bfcache_policy_names: Vec<String>,
     prerender_rule_names: Vec<String>,
+    history_policy_names: Vec<String>,
+    navigation_intent_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1001,6 +1007,38 @@ impl SubstratePipeline {
             prerender_rules.extend(prerender_rule_specs);
         }
 
+        // History/Navigation pack.
+        let history_policy_specs: Vec<HistoryPolicySpec> =
+            nami_core::history_policy::compile(&ext_src).unwrap_or_default();
+        let history_policy_names: Vec<String> = if history_policy_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            history_policy_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut history_policies = HistoryPolicyRegistry::new();
+        if history_policy_specs.is_empty() {
+            history_policies.insert(HistoryPolicySpec::default_profile());
+        } else {
+            history_policies.extend(history_policy_specs);
+        }
+
+        let navigation_intent_specs: Vec<NavigationIntentSpec> =
+            nami_core::navigation_intent::compile(&ext_src).unwrap_or_default();
+        let navigation_intent_names: Vec<String> = if navigation_intent_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            navigation_intent_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut navigation_intents = NavigationIntentRegistry::new();
+        if navigation_intent_specs.is_empty() {
+            navigation_intents.insert(NavigationIntentSpec::default_profile());
+        } else {
+            navigation_intents.extend(navigation_intent_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1343,7 +1381,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1431,6 +1469,8 @@ impl SubstratePipeline {
             resource_hints.len(),
             bfcache_policies.len(),
             prerender_rules.len(),
+            history_policies.len(),
+            navigation_intents.len(),
         );
 
         Self {
@@ -1519,6 +1559,8 @@ impl SubstratePipeline {
             resource_hints,
             bfcache_policies,
             prerender_rules,
+            history_policies,
+            navigation_intents,
             session_store,
             session_spec,
             wasm_agents,
@@ -1613,6 +1655,8 @@ impl SubstratePipeline {
             resource_hint_names,
             bfcache_policy_names,
             prerender_rule_names,
+            history_policy_names,
+            navigation_intent_names,
         }
     }
 
@@ -1975,6 +2019,56 @@ impl SubstratePipeline {
             .into_iter()
             .cloned()
             .collect()
+    }
+
+    // ── History/Navigation pack ──────────────────────────────────
+
+    #[must_use]
+    pub fn history_policy_list(&self) -> Vec<HistoryPolicySpec> {
+        self.history_policies.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn history_policy_for(&self, host: &str) -> Option<HistoryPolicySpec> {
+        self.history_policies.resolve(host).cloned()
+    }
+
+    /// Should the (host, url, dwell) tuple land in history?
+    #[must_use]
+    pub fn history_should_record(
+        &self,
+        host: &str,
+        url: &str,
+        dwell_seconds: u32,
+    ) -> Option<bool> {
+        self.history_policies
+            .resolve(host)
+            .map(|p| p.should_record(host, url, dwell_seconds))
+    }
+
+    #[must_use]
+    pub fn navigation_intent_list(&self) -> Vec<NavigationIntentSpec> {
+        self.navigation_intents.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn navigation_intent_for(&self, host: &str) -> Option<NavigationIntentSpec> {
+        self.navigation_intents.resolve(host).cloned()
+    }
+
+    /// Resolve the `OpenDisposition` for a navigation, returning
+    /// `None` when no profile matches the host.
+    #[must_use]
+    pub fn navigation_resolve(
+        &self,
+        host: &str,
+        source: nami_core::navigation_intent::ClickSource,
+        same_origin: bool,
+        had_user_gesture: bool,
+    ) -> Option<nami_core::navigation_intent::OpenDisposition> {
+        self.navigation_intents
+            .resolve(host)
+            .map(|s| s.resolve(source, same_origin, had_user_gesture))
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2976,6 +3070,8 @@ impl SubstratePipeline {
             resource_hints: self.resource_hint_names.clone(),
             bfcache_policies: self.bfcache_policy_names.clone(),
             prerender_rules: self.prerender_rule_names.clone(),
+            history_policies: self.history_policy_names.clone(),
+            navigation_intents: self.navigation_intent_names.clone(),
         }
     }
 

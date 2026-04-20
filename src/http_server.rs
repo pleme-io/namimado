@@ -166,6 +166,21 @@ pub fn router(service: NamimadoService) -> Router {
             "/prerender-rule/for-host",
             get(handle_prerender_rules_for_host),
         )
+        .route("/history-policy", get(handle_history_policy_list))
+        .route("/history-policy/resolve", get(handle_history_policy_for))
+        .route(
+            "/history-policy/should-record",
+            get(handle_history_should_record),
+        )
+        .route("/navigation-intent", get(handle_navigation_intent_list))
+        .route(
+            "/navigation-intent/resolve",
+            get(handle_navigation_intent_for),
+        )
+        .route(
+            "/navigation-intent/decide",
+            get(handle_navigation_decide),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1222,6 +1237,100 @@ async fn handle_prerender_rules_for_host(
     Query(q): Query<HostQuery>,
 ) -> Json<Vec<serde_json::Value>> {
     Json(svc.prerender_rules_for(&q.host.unwrap_or_default()))
+}
+
+async fn handle_history_policy_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.history_policy_list())
+}
+
+async fn handle_history_policy_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.history_policy_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_history_policy_matches"),
+            )
+        })
+}
+
+#[derive(Debug, Deserialize)]
+struct HistoryRecordQuery {
+    host: Option<String>,
+    url: Option<String>,
+    dwell_seconds: Option<u32>,
+}
+
+async fn handle_history_should_record(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HistoryRecordQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    let dwell = q.dwell_seconds.unwrap_or(0);
+    match svc.history_should_record(
+        &q.host.unwrap_or_default(),
+        &q.url.unwrap_or_default(),
+        dwell,
+    ) {
+        Some(b) => Ok(Json(serde_json::json!({ "should_record": b }))),
+        None => Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_history_policy_matches"),
+        )),
+    }
+}
+
+async fn handle_navigation_intent_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.navigation_intent_list())
+}
+
+async fn handle_navigation_intent_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.navigation_intent_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_navigation_intent_matches"),
+            )
+        })
+}
+
+#[derive(Debug, Deserialize)]
+struct NavigationDecideQuery {
+    host: Option<String>,
+    click_source: String,
+    #[serde(default)]
+    same_origin: bool,
+    #[serde(default)]
+    had_user_gesture: bool,
+}
+
+async fn handle_navigation_decide(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<NavigationDecideQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.navigation_resolve(
+        &q.host.unwrap_or_default(),
+        &q.click_source,
+        q.same_origin,
+        q.had_user_gesture,
+    )
+    .map(Json)
+    .ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::BAD_REQUEST,
+            ApiError::new("click_source_unknown").with_detail(q.click_source),
+        )
+    })
 }
 
 async fn handle_inspector_list(

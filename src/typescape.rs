@@ -326,6 +326,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/bfcache-policy/resolve", "Bfcache policy for `?host=…`."),
         mk("GET", "/prerender-rule", "Every (defprerender-rule) profile."),
         mk("GET", "/prerender-rule/for-host", "Prerender rules applicable to `?host=…`."),
+        mk("GET", "/history-policy", "Every (defhistory-policy) profile."),
+        mk("GET", "/history-policy/resolve", "History policy for `?host=…`."),
+        mk("GET", "/history-policy/should-record", "Whether (host, url, dwell_seconds) should be recorded."),
+        mk("GET", "/navigation-intent", "Every (defnavigation-intent) profile."),
+        mk("GET", "/navigation-intent/resolve", "Navigation-intent for `?host=…`."),
+        mk("GET", "/navigation-intent/decide", "OpenDisposition for (host, click_source, same_origin, had_user_gesture)."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -506,6 +512,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("bfcache_policy_for", "Bfcache policy for a host."),
         mk("prerender_rule_list", "Every (defprerender-rule) profile."),
         mk("prerender_rules_for", "Prerender rules applicable to a host."),
+        mk("history_policy_list", "Every (defhistory-policy) profile."),
+        mk("history_policy_for", "History policy for a host."),
+        mk("history_should_record", "Whether (host, url, dwell) should be recorded."),
+        mk("navigation_intent_list", "Every (defnavigation-intent) profile."),
+        mk("navigation_intent_for", "Navigation-intent for a host."),
+        mk("navigation_decide", "OpenDisposition for (host, click_source, same_origin, had_user_gesture)."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -629,6 +641,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 88, "88 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 90, "90 DSL keywords expected in nami-core");
     }
 }

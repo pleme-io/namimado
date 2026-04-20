@@ -1379,6 +1379,101 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn prerender_rules_for(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
 
+    // ── History/Navigation pack ──────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn history_policy_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .history_policy_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn history_policy_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .history_policy_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// Should this host+url+dwell be recorded in history?
+    #[cfg(feature = "browser-core")]
+    pub fn history_should_record(
+        &self,
+        host: &str,
+        url: &str,
+        dwell_seconds: u32,
+    ) -> Option<bool> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .history_should_record(host, url, dwell_seconds)
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn navigation_intent_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .navigation_intent_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn navigation_intent_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .navigation_intent_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// Resolve the effective OpenDisposition — returns None for an
+    /// unknown click source or a host with no matching profile.
+    #[cfg(feature = "browser-core")]
+    pub fn navigation_resolve(
+        &self,
+        host: &str,
+        click_source: &str,
+        same_origin: bool,
+        had_user_gesture: bool,
+    ) -> Option<serde_json::Value> {
+        let src = parse_click_source(click_source)?;
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .navigation_resolve(host, src, same_origin, had_user_gesture)
+            .and_then(|d| serde_json::to_value(&d).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn history_policy_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn history_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn history_should_record(&self, _h: &str, _u: &str, _d: u32) -> Option<bool> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn navigation_intent_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn navigation_intent_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn navigation_resolve(
+        &self,
+        _h: &str,
+        _c: &str,
+        _s: bool,
+        _g: bool,
+    ) -> Option<serde_json::Value> {
+        None
+    }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2991,6 +3086,26 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+fn parse_click_source(s: &str) -> Option<nami_core::navigation_intent::ClickSource> {
+    use nami_core::navigation_intent::ClickSource::*;
+    Some(match s {
+        "link-click" => LinkClick,
+        "middle-click" => MiddleClick,
+        "cmd-click" => CmdClick,
+        "cmd-shift-click" => CmdShiftClick,
+        "script-open" => ScriptOpen,
+        "form-target-blank" => FormTargetBlank,
+        "anchor-target-blank" => AnchorTargetBlank,
+        "drag-drop" => DragDrop,
+        "omnibox" => Omnibox,
+        "back-forward" => BackForward,
+        "reload" => Reload,
+        "keyboard-shortcut" => KeyboardShortcut,
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_permission(s: &str) -> Option<nami_core::permission_policy::Permission> {
     use nami_core::permission_policy::Permission::*;
     Some(match s {
@@ -3456,6 +3571,36 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn history_nav_pack_auto_registers_defaults_and_records() {
+        let svc = NamimadoService::new();
+        assert!(!svc.history_policy_list().is_empty());
+        assert!(!svc.navigation_intent_list().is_empty());
+        // Default history records regular URLs and skips excluded schemes.
+        assert_eq!(
+            svc.history_should_record("ex.com", "https://ex.com/page", 5),
+            Some(true)
+        );
+        assert_eq!(
+            svc.history_should_record("ex.com", "about:blank", 5),
+            Some(false)
+        );
+        // Default navigation_intent routes link-click to current tab.
+        assert_eq!(
+            svc.navigation_resolve("ex.com", "link-click", true, true),
+            Some(serde_json::json!("current-tab"))
+        );
+        // Script-open without user gesture → Block.
+        assert_eq!(
+            svc.navigation_resolve("ex.com", "script-open", false, false),
+            Some(serde_json::json!("block"))
+        );
+        // Unknown click source → None.
+        assert!(svc
+            .navigation_resolve("ex.com", "bogus", false, false)
+            .is_none());
     }
 
     #[test]
