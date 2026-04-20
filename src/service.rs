@@ -1127,6 +1127,88 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn webgpu_policy_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Suggestions pack ─────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_source_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_source_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_source_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_source_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_source_active_for(
+        &self,
+        input: &str,
+        host: &str,
+    ) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_source_active_for(input, host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_ranker_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_ranker_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_ranker_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_ranker_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn suggestion_ranker_for_source(
+        &self,
+        source_name: &str,
+    ) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .suggestion_ranker_for_source(source_name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_source_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_source_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_source_active_for(&self, _i: &str, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_ranker_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_ranker_get(&self, _n: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn suggestion_ranker_for_source(&self, _s: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3172,6 +3254,22 @@ mod tests {
         let svc = NamimadoService::new();
         assert!(!svc.service_worker_list().is_empty());
         assert!(svc.service_worker_for("example.com").is_some());
+    }
+
+    #[test]
+    fn suggestions_pack_default_source_active_for_any_host() {
+        let svc = NamimadoService::new();
+        assert!(!svc.suggestion_source_list().is_empty());
+        assert!(!svc.suggestion_ranker_list().is_empty());
+        // Default source has host="*" so any input len >= 1 returns
+        // it; empty input returns nothing (min_input_len = 1).
+        let any = svc.suggestion_source_active_for("f", "example.com");
+        assert!(!any.is_empty());
+        let empty = svc.suggestion_source_active_for("", "example.com");
+        assert!(empty.is_empty());
+        // Default ranker applies to any source.
+        assert!(svc.suggestion_ranker_for_source("history").is_some());
+        assert!(svc.suggestion_ranker_for_source("unknown").is_some());
     }
 
     #[test]

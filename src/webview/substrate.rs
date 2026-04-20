@@ -78,6 +78,8 @@ use nami_core::totp::{TotpRegistry, TotpSpec};
 use nami_core::fingerprint_randomize::{FingerprintRandomizeRegistry, FingerprintRandomizeSpec};
 use nami_core::cookie_jar::{CookieJarRegistry, CookieJarSpec};
 use nami_core::webgpu_policy::{WebgpuPolicyRegistry, WebgpuPolicySpec};
+use nami_core::suggestion_source::{SuggestionSourceRegistry, SuggestionSourceSpec};
+use nami_core::suggestion_ranker::{SuggestionRankerRegistry, SuggestionRankerSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -267,6 +269,8 @@ pub struct SubstratePipeline {
     fingerprint_randomizes: FingerprintRandomizeRegistry,
     cookie_jars: CookieJarRegistry,
     webgpu_policies: WebgpuPolicyRegistry,
+    suggestion_sources: SuggestionSourceRegistry,
+    suggestion_rankers: SuggestionRankerRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -359,6 +363,8 @@ pub struct SubstratePipeline {
     fingerprint_randomize_names: Vec<String>,
     cookie_jar_names: Vec<String>,
     webgpu_policy_names: Vec<String>,
+    suggestion_source_names: Vec<String>,
+    suggestion_ranker_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -874,6 +880,41 @@ impl SubstratePipeline {
             webgpu_policies.extend(webgpu_policy_specs);
         }
 
+        // Suggestions pack — omnibox autocomplete pipeline.
+        let suggestion_source_specs: Vec<SuggestionSourceSpec> =
+            nami_core::suggestion_source::compile(&ext_src).unwrap_or_default();
+        let suggestion_source_names: Vec<String> = if suggestion_source_specs.is_empty() {
+            vec!["history".to_owned()]
+        } else {
+            suggestion_source_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut suggestion_sources = SuggestionSourceRegistry::new();
+        if suggestion_source_specs.is_empty() {
+            suggestion_sources.insert(SuggestionSourceSpec::default_profile());
+        } else {
+            suggestion_sources.extend(suggestion_source_specs);
+        }
+
+        let suggestion_ranker_specs: Vec<SuggestionRankerSpec> =
+            nami_core::suggestion_ranker::compile(&ext_src).unwrap_or_default();
+        let suggestion_ranker_names: Vec<String> = if suggestion_ranker_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            suggestion_ranker_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut suggestion_rankers = SuggestionRankerRegistry::new();
+        if suggestion_ranker_specs.is_empty() {
+            suggestion_rankers.insert(SuggestionRankerSpec::default_profile());
+        } else {
+            suggestion_rankers.extend(suggestion_ranker_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1216,7 +1257,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1297,6 +1338,8 @@ impl SubstratePipeline {
             fingerprint_randomizes.len(),
             cookie_jars.len(),
             webgpu_policies.len(),
+            suggestion_sources.len(),
+            suggestion_rankers.len(),
         );
 
         Self {
@@ -1378,6 +1421,8 @@ impl SubstratePipeline {
             fingerprint_randomizes,
             cookie_jars,
             webgpu_policies,
+            suggestion_sources,
+            suggestion_rankers,
             session_store,
             session_spec,
             wasm_agents,
@@ -1465,6 +1510,8 @@ impl SubstratePipeline {
             fingerprint_randomize_names,
             cookie_jar_names,
             webgpu_policy_names,
+            suggestion_source_names,
+            suggestion_ranker_names,
         }
     }
 
@@ -1696,6 +1743,49 @@ impl SubstratePipeline {
     #[must_use]
     pub fn webgpu_policy_for(&self, host: &str) -> Option<WebgpuPolicySpec> {
         self.webgpu_policies.resolve(host).cloned()
+    }
+
+    // ── Suggestions pack ─────────────────────────────────────────
+
+    #[must_use]
+    pub fn suggestion_source_list(&self) -> Vec<SuggestionSourceSpec> {
+        self.suggestion_sources.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn suggestion_source_get(&self, name: &str) -> Option<SuggestionSourceSpec> {
+        self.suggestion_sources.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn suggestion_source_active_for(
+        &self,
+        input: &str,
+        host: &str,
+    ) -> Vec<SuggestionSourceSpec> {
+        self.suggestion_sources
+            .active_for(input, host)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    #[must_use]
+    pub fn suggestion_ranker_list(&self) -> Vec<SuggestionRankerSpec> {
+        self.suggestion_rankers.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn suggestion_ranker_get(&self, name: &str) -> Option<SuggestionRankerSpec> {
+        self.suggestion_rankers.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn suggestion_ranker_for_source(
+        &self,
+        source_name: &str,
+    ) -> Option<SuggestionRankerSpec> {
+        self.suggestion_rankers.for_source(source_name).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2690,6 +2780,8 @@ impl SubstratePipeline {
             fingerprint_randomizes: self.fingerprint_randomize_names.clone(),
             cookie_jars: self.cookie_jar_names.clone(),
             webgpu_policies: self.webgpu_policy_names.clone(),
+            suggestion_sources: self.suggestion_source_names.clone(),
+            suggestion_rankers: self.suggestion_ranker_names.clone(),
         }
     }
 

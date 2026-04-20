@@ -307,6 +307,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/cookie-jar/resolve", "Cookie-jar profile for `?host=…`."),
         mk("GET", "/webgpu-policy", "Every (defwebgpu-policy) profile."),
         mk("GET", "/webgpu-policy/resolve", "Webgpu-policy profile for `?host=…`."),
+        mk("GET", "/suggestion-source", "Every (defsuggestion-source) profile."),
+        mk("GET", "/suggestion-source/:name", "Full SuggestionSourceSpec for one profile."),
+        mk("GET", "/suggestion-source/active", "Sources active for `?input=…&host=…`."),
+        mk("GET", "/suggestion-ranker", "Every (defsuggestion-ranker) profile."),
+        mk("GET", "/suggestion-ranker/:name", "Full SuggestionRankerSpec for one profile."),
+        mk("GET", "/suggestion-ranker/for-source/:source", "Ranker responsible for a named source."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -468,6 +474,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("cookie_jar_for", "Cookie-jar profile for a host."),
         mk("webgpu_policy_list", "Every (defwebgpu-policy) profile."),
         mk("webgpu_policy_for", "Webgpu-policy profile for a host."),
+        mk("suggestion_source_list", "Every (defsuggestion-source) profile."),
+        mk("suggestion_source_get", "Full SuggestionSourceSpec for one profile by name."),
+        mk("suggestion_source_active_for", "Suggestion sources active for an input on a host."),
+        mk("suggestion_ranker_list", "Every (defsuggestion-ranker) profile."),
+        mk("suggestion_ranker_get", "Full SuggestionRankerSpec for one profile by name."),
+        mk("suggestion_ranker_for_source", "Ranker responsible for a named source."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -591,6 +603,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 81, "81 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 83, "83 DSL keywords expected in nami-core");
     }
 }

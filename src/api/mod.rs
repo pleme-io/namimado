@@ -262,6 +262,8 @@ pub struct RulesInventory {
     pub fingerprint_randomizes: Vec<String>,
     pub cookie_jars: Vec<String>,
     pub webgpu_policies: Vec<String>,
+    pub suggestion_sources: Vec<String>,
+    pub suggestion_rankers: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

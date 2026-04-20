@@ -207,6 +207,20 @@ struct IdentityRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct SuggestionActiveRequest {
+    /// Current omnibox input text.
+    input: String,
+    /// Host the user is currently on (for host-glob matching). "" = any.
+    host: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SuggestionSourceRequest {
+    /// (defsuggestion-source) name.
+    source: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct SyncSignalRequest {
     /// One of: bookmarks, history, tabs, open-windows, passwords,
     /// passkeys, sessions, extensions, settings, reading-list,
@@ -1225,6 +1239,74 @@ impl NamimadoMcpServer {
         match self.service.webgpu_policy_for(&req.host) {
             Some(v) => Ok(ToolResponse::success(&v)),
             None => Ok(ToolResponse::error("no_webgpu_policy_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defsuggestion-source) profile.")]
+    async fn suggestion_source_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.suggestion_source_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SuggestionSourceSpec for one profile by name.")]
+    async fn suggestion_source_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.suggestion_source_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "suggestion_source_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Suggestion sources active for an omnibox input on a host.")]
+    async fn suggestion_source_active_for(
+        &self,
+        Parameters(req): Parameters<SuggestionActiveRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(
+                &self.service.suggestion_source_active_for(&req.input, &req.host),
+            )
+            .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defsuggestion-ranker) profile.")]
+    async fn suggestion_ranker_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.suggestion_ranker_list())
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SuggestionRankerSpec for one profile by name.")]
+    async fn suggestion_ranker_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.suggestion_ranker_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "suggestion_ranker_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Ranker responsible for a named suggestion source (source-specific preferred over default).")]
+    async fn suggestion_ranker_for_source(
+        &self,
+        Parameters(req): Parameters<SuggestionSourceRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.suggestion_ranker_for_source(&req.source) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_ranker_matches")),
         }
     }
 

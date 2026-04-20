@@ -123,6 +123,18 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/cookie-jar/resolve", get(handle_cookie_jar_for))
         .route("/webgpu-policy", get(handle_webgpu_policy_list))
         .route("/webgpu-policy/resolve", get(handle_webgpu_policy_for))
+        .route("/suggestion-source", get(handle_suggestion_source_list))
+        .route("/suggestion-source/:name", get(handle_suggestion_source_get))
+        .route(
+            "/suggestion-source/active",
+            get(handle_suggestion_source_active),
+        )
+        .route("/suggestion-ranker", get(handle_suggestion_ranker_list))
+        .route("/suggestion-ranker/:name", get(handle_suggestion_ranker_get))
+        .route(
+            "/suggestion-ranker/for-source/:source",
+            get(handle_suggestion_ranker_for_source),
+        )
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -981,6 +993,72 @@ async fn handle_webgpu_policy_for(
             ApiErrorResponse(
                 StatusCode::NOT_FOUND,
                 ApiError::new("no_webgpu_policy_matches"),
+            )
+        })
+}
+
+async fn handle_suggestion_source_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.suggestion_source_list())
+}
+
+async fn handle_suggestion_source_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.suggestion_source_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("suggestion_source_unknown").with_detail(name),
+        )
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct SuggestionActiveQuery {
+    input: Option<String>,
+    host: Option<String>,
+}
+
+async fn handle_suggestion_source_active(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<SuggestionActiveQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.suggestion_source_active_for(
+        &q.input.unwrap_or_default(),
+        &q.host.unwrap_or_default(),
+    ))
+}
+
+async fn handle_suggestion_ranker_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.suggestion_ranker_list())
+}
+
+async fn handle_suggestion_ranker_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.suggestion_ranker_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("suggestion_ranker_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_suggestion_ranker_for_source(
+    State(svc): State<NamimadoService>,
+    Path(source): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.suggestion_ranker_for_source(&source)
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_ranker_matches"),
             )
         })
 }
