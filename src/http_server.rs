@@ -16,13 +16,14 @@ use std::net::SocketAddr;
 use tracing::info;
 
 use crate::api::{
-    AddBookmarkRequest, ApiError, BookmarkInfo, CommandInfo, DispatchKeyRequest,
-    DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary,
-    ExtensionToggleRequest, HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest,
-    NavigateResponse, OmniboxResponse, ReaderResponse, ReloadResponse, ReportResponse,
-    RulesInventory, SecurityPolicyResponse, StateCellValue, StatusResponse, StorageEntry,
-    StorageIndexSummary, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
-    VerifyExtensionResponse,
+    AddBookmarkRequest, ApiError, BookmarkInfo, BoostInfo, BoostToggleRequest, CommandInfo,
+    DispatchKeyRequest, DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse,
+    ExtensionSummary, ExtensionToggleRequest, FindRequest, FindResponse, GestureDispatchRequest,
+    GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest,
+    NavigateResponse, OmniboxResponse, PipResponse, ReaderResponse, ReloadResponse,
+    ReportResponse, RulesInventory, SecurityPolicyResponse, SessionTabInfo,
+    SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary,
+    StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::service::NamimadoService;
 
@@ -67,6 +68,17 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/find", post(handle_find))
+        .route("/zoom", get(handle_zoom))
+        .route("/snapshot/recipe", get(handle_snapshot_recipe))
+        .route("/pip", get(handle_pip))
+        .route("/gesture/dispatch", post(handle_gesture_dispatch))
+        .route("/boosts", get(handle_boosts_list))
+        .route("/boosts/css", get(handle_boosts_css))
+        .route("/boosts/:name/enabled", post(handle_boost_set_enabled))
+        .route("/session/open", get(handle_session_open))
+        .route("/session/closed", get(handle_session_closed))
+        .route("/session/undo-close", post(handle_session_undo_close))
         .route("/reader", get(handle_reader))
         .route(
             "/extensions",
@@ -437,6 +449,118 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_find(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<FindRequest>,
+) -> Result<Json<FindResponse>, ApiErrorResponse> {
+    svc.find(req).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_navigate_yet").with_detail("call POST /navigate first"),
+        )
+    })
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct HostQuery {
+    #[serde(default)]
+    host: Option<String>,
+}
+
+async fn handle_zoom(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<ZoomResponse> {
+    Json(svc.zoom_for(&q.host.unwrap_or_default()))
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct SnapshotRecipeQuery {
+    #[serde(default)]
+    host: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+async fn handle_snapshot_recipe(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<SnapshotRecipeQuery>,
+) -> Result<Json<SnapshotRecipeResponse>, ApiErrorResponse> {
+    svc.snapshot_recipe(q.name.as_deref(), &q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_recipe_matches"),
+            )
+        })
+}
+
+async fn handle_pip(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<PipResponse> {
+    Json(svc.pip_for(&q.host.unwrap_or_default()))
+}
+
+async fn handle_gesture_dispatch(
+    State(svc): State<NamimadoService>,
+    Json(req): Json<GestureDispatchRequest>,
+) -> Json<GestureDispatchResponse> {
+    Json(svc.gesture_dispatch(req))
+}
+
+async fn handle_boosts_list(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<BoostInfo>> {
+    Json(svc.boosts_list(q.host.as_deref()))
+}
+
+async fn handle_boosts_css(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        svc.boost_css(&q.host.unwrap_or_default()),
+    )
+}
+
+async fn handle_boost_set_enabled(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+    Json(req): Json<BoostToggleRequest>,
+) -> Result<StatusCode, ApiErrorResponse> {
+    if svc.boost_set_enabled(&name, req) {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("boost_unknown").with_detail(name),
+        ))
+    }
+}
+
+async fn handle_session_open(State(svc): State<NamimadoService>) -> Json<Vec<SessionTabInfo>> {
+    Json(svc.session_open())
+}
+
+async fn handle_session_closed(State(svc): State<NamimadoService>) -> Json<Vec<SessionTabInfo>> {
+    Json(svc.session_closed())
+}
+
+async fn handle_session_undo_close(
+    State(svc): State<NamimadoService>,
+) -> Result<Json<SessionTabInfo>, ApiErrorResponse> {
+    svc.session_undo_close().map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_closed_tabs"),
+        )
+    })
 }
 
 #[derive(Debug, Deserialize, Default)]

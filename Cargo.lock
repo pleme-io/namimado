@@ -3098,7 +3098,7 @@ dependencies = [
 [[package]]
 name = "nami-core"
 version = "0.1.0"
-source = "git+ssh://git@github.com/pleme-io/nami-core?branch=main#d3bdaf8b37340e0e919dbc1dbf95fab26c9f7017"
+source = "git+ssh://git@github.com/pleme-io/nami-core?branch=main#d85cb12db5c9a82eaf7a8715357193f3d7a339fb"
 dependencies = [
  "base64",
  "blake3",
@@ -3106,6 +3106,7 @@ dependencies = [
  "html5ever",
  "lightningcss",
  "markup5ever",
+ "regex",
  "serde",
  "serde_json",
  "taffy",
@@ -5976,6 +5977,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

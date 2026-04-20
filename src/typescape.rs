@@ -195,6 +195,17 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/i18n/:namespace", "Resolve one translated message (`?locale=&key=`); applies fallback chain."),
         mk("GET", "/i18n/:namespace/coverage", "Translation coverage — available locales + missing keys vs :en."),
         mk("GET", "/security-policy", "Render per-host security-policy headers (`?host=…`) via (defsecurity-policy)."),
+        mk("POST", "/find", "Find-in-page against the last-navigated doc (body: query + optional profile)."),
+        mk("GET", "/zoom", "Resolved zoom + text-only flag for `?host=…`."),
+        mk("GET", "/snapshot/recipe", "Snapshot recipe for `?host=…&name=…` (pixel capture is GPU-side)."),
+        mk("GET", "/pip", "Picture-in-picture rule for `?host=…`."),
+        mk("POST", "/gesture/dispatch", "Dispatch a mouse-gesture stroke → command."),
+        mk("GET", "/boosts", "Per-host (or all) (defboost) overlay inventory."),
+        mk("GET", "/boosts/css", "Merged CSS from every applicable boost for `?host=…`."),
+        mk("POST", "/boosts/:name/enabled", "Toggle a boost at runtime."),
+        mk("GET", "/session/open", "Currently-open session tabs."),
+        mk("GET", "/session/closed", "Recently-closed tabs, newest first."),
+        mk("POST", "/session/undo-close", "Pop the most-recently-closed tab (Cmd+Shift+T)."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -246,6 +257,16 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("i18n_get", "Resolve one translated message with fallback chain."),
         mk("i18n_coverage", "Translation coverage — locales + missing keys."),
         mk("security_policy", "Per-host security-policy headers (CSP + Permissions-Policy + more)."),
+        mk("find", "Find-in-page against the last navigated document."),
+        mk("zoom", "Resolved zoom + text-only flag for a host."),
+        mk("snapshot_recipe", "Declarative snapshot recipe for a host."),
+        mk("pip", "Picture-in-picture rule for a host."),
+        mk("gesture_dispatch", "Dispatch a mouse-gesture stroke → command."),
+        mk("boosts_list", "List (defboost) overlays, optionally by host."),
+        mk("boost_set_enabled", "Toggle a boost at runtime."),
+        mk("session_open", "Currently-open session tabs."),
+        mk("session_closed", "Recently-closed session tabs."),
+        mk("session_undo_close", "Pop the most-recently-closed tab."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -369,6 +390,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 23, "23 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 30, "30 DSL keywords expected in nami-core");
     }
 }

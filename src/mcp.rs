@@ -109,6 +109,39 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct FindToolRequest {
+    query: String,
+    profile: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct HostOnlyRequest {
+    host: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SnapshotRecipeToolRequest {
+    host: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GestureDispatchToolRequest {
+    stroke: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct BoostToggleToolRequest {
+    name: String,
+    enabled: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct BoostsListToolRequest {
+    host: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct StorageByIndexRangeRequest {
     store: String,
     path: String,
@@ -693,6 +726,139 @@ impl NamimadoMcpServer {
                 "extension_unknown: {}",
                 req.name
             )))
+        }
+    }
+
+    #[tool(
+        description = "Find-in-page against the last navigated document. \
+                       Honors (deffind) profile knobs: case-sensitive, \
+                       whole-word, regex, max-matches."
+    )]
+    async fn find(
+        &self,
+        Parameters(req): Parameters<FindToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::FindRequest {
+            query: req.query,
+            profile: req.profile,
+        };
+        match self.service.find(api_req) {
+            Some(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error("no_navigate_yet")),
+        }
+    }
+
+    #[tool(description = "Resolved zoom level + text-only flag for a host.")]
+    async fn zoom(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.service.zoom_for(&req.host);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Resolve a (defsnapshot) recipe for the given host. \
+                       Returns region/format/scale/quality/selector/attest. \
+                       Pixel capture is GPU-side; this is the declarative \
+                       contract."
+    )]
+    async fn snapshot_recipe(
+        &self,
+        Parameters(req): Parameters<SnapshotRecipeToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.snapshot_recipe(req.name.as_deref(), &req.host) {
+            Some(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error("no_recipe_matches")),
+        }
+    }
+
+    #[tool(description = "Picture-in-picture rule for a host — selectors + position.")]
+    async fn pip(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.service.pip_for(&req.host);
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "Dispatch a mouse-gesture stroke against (defgesture) \
+                       bindings. Returns { outcome: run | miss, command? }."
+    )]
+    async fn gesture_dispatch(
+        &self,
+        Parameters(req): Parameters<GestureDispatchToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.service.gesture_dispatch(crate::api::GestureDispatchRequest {
+            stroke: req.stroke,
+        });
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&resp).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List (defboost) overlays, optionally filtered by host.")]
+    async fn boosts_list(
+        &self,
+        Parameters(req): Parameters<BoostsListToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let list = self.service.boosts_list(req.host.as_deref());
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&list).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Enable / disable a boost at runtime.")]
+    async fn boost_set_enabled(
+        &self,
+        Parameters(req): Parameters<BoostToggleToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let api_req = crate::api::BoostToggleRequest { enabled: req.enabled };
+        if self.service.boost_set_enabled(&req.name, api_req) {
+            Ok(ToolResponse::success(&serde_json::json!({
+                "name": req.name,
+                "enabled": req.enabled,
+            })))
+        } else {
+            Ok(ToolResponse::error(&format!(
+                "boost_unknown: {}",
+                req.name
+            )))
+        }
+    }
+
+    #[tool(description = "Currently-open session tabs.")]
+    async fn session_open(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.session_open();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Recently-closed session tabs (ring-buffered, newest-first).")]
+    async fn session_closed(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.session_closed();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Pop the most-recently-closed tab (Cmd+Shift+T).")]
+    async fn session_undo_close(&self) -> Result<CallToolResult, McpError> {
+        match self.service.session_undo_close() {
+            Some(t) => Ok(ToolResponse::success(
+                &serde_json::to_value(&t).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error("no_closed_tabs")),
         }
     }
 

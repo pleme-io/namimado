@@ -39,8 +39,15 @@ use nami_core::extension::{
     ExtensionRegistry, ExtensionSpec, SignedExtension, Trustdb, VerificationError,
     VerificationStatus,
 };
+use nami_core::boost::{BoostRegistry, BoostSpec};
+use nami_core::find::{FindRegistry, FindSpec};
+use nami_core::gesture::{GestureRegistry, GestureSpec};
 use nami_core::i18n::{MessageRegistry, MessageSpec};
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
+use nami_core::pip::{PipRegistry, PipSpec};
+use nami_core::session::{SessionSpec, SessionStore, TabRecord};
+use nami_core::snapshot::{SnapshotRegistry, SnapshotSpec};
+use nami_core::zoom::{ZoomRegistry, ZoomSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::security_policy::{
     PolicyHeaders, SecurityPolicyRegistry, SecurityPolicySpec,
@@ -142,6 +149,14 @@ pub struct SubstratePipeline {
     omniboxes: OmniboxRegistry,
     messages: MessageRegistry,
     security_policies: SecurityPolicyRegistry,
+    finds: FindRegistry,
+    zooms: ZoomRegistry,
+    snapshots: SnapshotRegistry,
+    pips: PipRegistry,
+    gestures: GestureRegistry,
+    boosts: BoostRegistry,
+    session_store: Arc<std::sync::Mutex<SessionStore>>,
+    session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
     wasm_host: Option<WasmHost>,
     storage_registry: StorageRegistry,
@@ -175,6 +190,12 @@ pub struct SubstratePipeline {
     omnibox_names: Vec<String>,
     i18n_namespaces: Vec<String>,
     security_policy_names: Vec<String>,
+    find_names: Vec<String>,
+    zoom_hosts: Vec<String>,
+    snapshot_names: Vec<String>,
+    pip_names: Vec<String>,
+    gesture_strokes: Vec<String>,
+    boost_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -330,6 +351,82 @@ impl SubstratePipeline {
         let mut messages = MessageRegistry::new();
         messages.extend(message_specs);
 
+        // Tier-1 registries — compile, default-when-empty where it
+        // makes sense.
+        let find_specs: Vec<FindSpec> =
+            nami_core::find::compile(&ext_src).unwrap_or_default();
+        let find_names: Vec<String> = if find_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            find_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut finds = FindRegistry::new();
+        if find_specs.is_empty() {
+            finds.insert(FindSpec::default_profile());
+        } else {
+            finds.extend(find_specs);
+        }
+
+        let zoom_specs: Vec<ZoomSpec> =
+            nami_core::zoom::compile(&ext_src).unwrap_or_default();
+        let zoom_hosts: Vec<String> =
+            zoom_specs.iter().map(|s| s.host.clone()).collect();
+        let mut zooms = ZoomRegistry::new();
+        zooms.extend(zoom_specs);
+
+        let snap_specs: Vec<SnapshotSpec> =
+            nami_core::snapshot::compile(&ext_src).unwrap_or_default();
+        let snapshot_names: Vec<String> = if snap_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            snap_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut snapshots = SnapshotRegistry::new();
+        if snap_specs.is_empty() {
+            snapshots.insert(SnapshotSpec::default_profile());
+        } else {
+            snapshots.extend(snap_specs);
+        }
+
+        let pip_specs: Vec<PipSpec> =
+            nami_core::pip::compile(&ext_src).unwrap_or_default();
+        let pip_names: Vec<String> = if pip_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            pip_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut pips = PipRegistry::new();
+        if pip_specs.is_empty() {
+            pips.insert(PipSpec::default_profile());
+        } else {
+            pips.extend(pip_specs);
+        }
+
+        let gesture_specs: Vec<GestureSpec> =
+            nami_core::gesture::compile(&ext_src).unwrap_or_default();
+        let mut gestures = GestureRegistry::new();
+        gestures.extend(gesture_specs);
+        let gesture_strokes = gestures.strokes();
+
+        let boost_specs: Vec<BoostSpec> =
+            nami_core::boost::compile(&ext_src).unwrap_or_default();
+        let boost_names: Vec<String> =
+            boost_specs.iter().map(|s| s.name.clone()).collect();
+        let mut boosts = BoostRegistry::new();
+        boosts.extend(boost_specs);
+
+        // Session profile — single, default when absent. The actual
+        // session store starts empty; persistence is a follow-up.
+        let session_specs: Vec<SessionSpec> =
+            nami_core::session::compile(&ext_src).unwrap_or_default();
+        let session_spec = session_specs
+            .into_iter()
+            .next()
+            .unwrap_or_else(SessionSpec::default_profile);
+        let session_store = Arc::new(std::sync::Mutex::new(
+            SessionStore::from_spec(&session_spec),
+        ));
+
         // Security policies.
         let sp_specs: Vec<SecurityPolicySpec> =
             nami_core::security_policy::compile(&ext_src).unwrap_or_default();
@@ -422,7 +519,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -446,6 +543,12 @@ impl SubstratePipeline {
             omniboxes.len(),
             messages.len(),
             security_policies.len(),
+            finds.len(),
+            zooms.len(),
+            snapshots.len(),
+            pips.len(),
+            gestures.len(),
+            boosts.len(),
         );
 
         Self {
@@ -467,6 +570,14 @@ impl SubstratePipeline {
             omniboxes,
             messages,
             security_policies,
+            finds,
+            zooms,
+            snapshots,
+            pips,
+            gestures,
+            boosts,
+            session_store,
+            session_spec,
             wasm_agents,
             wasm_host,
             storage_registry,
@@ -495,6 +606,121 @@ impl SubstratePipeline {
             omnibox_names,
             i18n_namespaces,
             security_policy_names,
+            find_names,
+            zoom_hosts,
+            snapshot_names,
+            pip_names,
+            gesture_strokes,
+            boost_names,
+        }
+    }
+
+    // ── Tier-1 accessor surface ───────────────────────────────────
+
+    #[must_use]
+    pub fn find_profile(&self, name: Option<&str>) -> FindSpec {
+        name.and_then(|n| self.finds.get(n))
+            .cloned()
+            .unwrap_or_else(FindSpec::default_profile)
+    }
+
+    #[must_use]
+    pub fn find_in(&self, doc: &Document, query: &str, profile: Option<&str>) -> Vec<nami_core::find::FindMatch> {
+        let spec = self.find_profile(profile);
+        nami_core::find::find_in_document(doc, query, &spec)
+    }
+
+    #[must_use]
+    pub fn zoom_for(&self, host: &str) -> (f32, bool) {
+        (
+            self.zooms.level_for(host),
+            self.zooms.text_only_for(host),
+        )
+    }
+
+    #[must_use]
+    pub fn snapshot_recipe(&self, name: Option<&str>, host: &str) -> Option<SnapshotSpec> {
+        name.and_then(|n| self.snapshots.get(n))
+            .or_else(|| self.snapshots.resolve(host))
+            .cloned()
+    }
+
+    #[must_use]
+    pub fn pip_for(&self, host: &str) -> Option<PipSpec> {
+        self.pips.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn gesture_dispatch(&self, stroke: &str) -> Option<GestureSpec> {
+        self.gestures.resolve(stroke).cloned()
+    }
+
+    /// Every boost's CSS merged for this host.
+    #[must_use]
+    pub fn boost_css(&self, host: &str) -> String {
+        self.boosts.merged_css(host)
+    }
+
+    /// Extra blocker selectors contributed by boosts for this host.
+    #[must_use]
+    pub fn boost_blocker_selectors(&self, host: &str) -> Vec<String> {
+        self.boosts.merged_blocker_selectors(host)
+    }
+
+    /// Full boost-spec list applicable to this host (after the enabled gate).
+    #[must_use]
+    pub fn boosts_applicable(&self, host: &str) -> Vec<BoostSpec> {
+        self.boosts
+            .applicable(host)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    pub fn boost_set_enabled(&mut self, name: &str, enabled: bool) -> bool {
+        self.boosts.set_enabled(name, enabled)
+    }
+
+    #[must_use]
+    pub fn session_spec(&self) -> &SessionSpec {
+        &self.session_spec
+    }
+
+    pub fn session_record_open(&self, rec: TabRecord) {
+        if let Ok(mut s) = self.session_store.lock() {
+            s.record_open(rec);
+        }
+    }
+
+    pub fn session_record_close(&self, rec: TabRecord) {
+        if let Ok(mut s) = self.session_store.lock() {
+            s.record_close(rec);
+        }
+    }
+
+    pub fn session_undo_close(&self) -> Option<TabRecord> {
+        self.session_store.lock().ok()?.undo_close()
+    }
+
+    #[must_use]
+    pub fn session_closed_tabs(&self) -> Vec<TabRecord> {
+        self.session_store
+            .lock()
+            .map(|s| s.closed_tabs())
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn session_snapshot(&self) -> Vec<TabRecord> {
+        self.session_store
+            .lock()
+            .map(|s| s.snapshot())
+            .unwrap_or_default()
+    }
+
+    pub fn session_restore(&self, tabs: Vec<TabRecord>) {
+        if let Ok(mut s) = self.session_store.lock() {
+            s.restore(tabs);
         }
     }
 
@@ -833,6 +1059,12 @@ impl SubstratePipeline {
             omniboxes: self.omnibox_names.clone(),
             i18n: self.i18n_namespaces.clone(),
             security_policies: self.security_policy_names.clone(),
+            finds: self.find_names.clone(),
+            zooms: self.zoom_hosts.clone(),
+            snapshots: self.snapshot_names.clone(),
+            pips: self.pip_names.clone(),
+            gestures: self.gesture_strokes.clone(),
+            boosts: self.boost_names.clone(),
         }
     }
 

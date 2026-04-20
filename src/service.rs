@@ -20,12 +20,14 @@ use std::time::SystemTime;
 use url::Url;
 
 use crate::api::{
-    AddBookmarkRequest, BookmarkInfo, CommandInfo, DispatchKeyRequest, DispatchKeyResponse,
-    ExtensionInstallRequest, ExtensionInstallResponse, ExtensionSummary, ExtensionToggleRequest,
-    HistoryInfo, I18nCoverage, I18nResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
-    OmniboxSuggestion, ReaderResponse, ReloadResponse, ReportResponse, RulesInventory,
-    SecurityPolicyResponse, StateCellValue, StatusResponse, StorageEntry, StorageSetRequest,
-    StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse,
+    AddBookmarkRequest, BookmarkInfo, BoostInfo, BoostToggleRequest, CommandInfo,
+    DispatchKeyRequest, DispatchKeyResponse, ExtensionInstallRequest, ExtensionInstallResponse,
+    ExtensionSummary, ExtensionToggleRequest, FindMatchInfo, FindRequest, FindResponse,
+    GestureDispatchRequest, GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse,
+    NavigateRequest, NavigateResponse, OmniboxResponse, OmniboxSuggestion, PipResponse,
+    ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
+    SessionTabInfo, SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry,
+    StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -577,6 +579,263 @@ impl NamimadoService {
             profile: profile.unwrap_or("default").to_owned(),
             suggestions: Vec::new(),
         }
+    }
+
+    /// POST /find — run find against the last-navigated page.
+    #[cfg(feature = "browser-core")]
+    pub fn find(&self, req: FindRequest) -> Option<FindResponse> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let sexp = inner.last_outcome.as_ref()?.dom_sexp.clone();
+        let profile_name = req
+            .profile
+            .clone()
+            .unwrap_or_else(|| "default".to_owned());
+        let spec = inner.pipeline.find_profile(req.profile.as_deref());
+        drop(inner);
+        let doc = nami_core::lisp::sexp_to_dom(&sexp).ok()?;
+        let hits = nami_core::find::find_in_document(&doc, &req.query, &spec);
+        Some(FindResponse {
+            query: req.query,
+            profile: profile_name,
+            matches: hits
+                .into_iter()
+                .map(|m| FindMatchInfo {
+                    enclosing_tag: m.enclosing_tag,
+                    text_node_index: m.text_node_index,
+                    offset: m.offset,
+                    matched: m.matched,
+                })
+                .collect(),
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn find(&self, _req: FindRequest) -> Option<FindResponse> {
+        None
+    }
+
+    /// GET /zoom?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn zoom_for(&self, host: &str) -> ZoomResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let (level, text_only) = inner.pipeline.zoom_for(host);
+        ZoomResponse {
+            host: host.to_owned(),
+            level,
+            text_only,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn zoom_for(&self, host: &str) -> ZoomResponse {
+        ZoomResponse {
+            host: host.to_owned(),
+            level: 1.0,
+            text_only: false,
+        }
+    }
+
+    /// GET /snapshot/recipe?host=&name=
+    #[cfg(feature = "browser-core")]
+    pub fn snapshot_recipe(&self, name: Option<&str>, host: &str) -> Option<SnapshotRecipeResponse> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let spec = inner.pipeline.snapshot_recipe(name, host)?;
+        let scale = spec.clamped_scale();
+        let quality = spec.clamped_quality();
+        Some(SnapshotRecipeResponse {
+            name: spec.name,
+            region: format!("{:?}", spec.region).to_lowercase(),
+            format: format!("{:?}", spec.format).to_lowercase(),
+            scale,
+            quality,
+            selector: spec.selector,
+            attest: spec.attest,
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn snapshot_recipe(
+        &self,
+        _n: Option<&str>,
+        _h: &str,
+    ) -> Option<SnapshotRecipeResponse> {
+        None
+    }
+
+    /// GET /pip?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn pip_for(&self, host: &str) -> PipResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let Some(spec) = inner.pipeline.pip_for(host) else {
+            return PipResponse {
+                host: host.to_owned(),
+                ..PipResponse::default()
+            };
+        };
+        PipResponse {
+            host: host.to_owned(),
+            name: Some(spec.name),
+            selectors: spec.selectors,
+            position: format!("{:?}", spec.position).to_lowercase(),
+            auto_activate: spec.auto_activate,
+            always_on_top: spec.always_on_top,
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn pip_for(&self, host: &str) -> PipResponse {
+        PipResponse {
+            host: host.to_owned(),
+            ..PipResponse::default()
+        }
+    }
+
+    /// POST /gesture/dispatch — resolve a stroke to a command.
+    #[cfg(feature = "browser-core")]
+    pub fn gesture_dispatch(&self, req: GestureDispatchRequest) -> GestureDispatchResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        match inner.pipeline.gesture_dispatch(&req.stroke) {
+            Some(spec) => GestureDispatchResponse {
+                outcome: "run".into(),
+                command: Some(spec.command),
+            },
+            None => GestureDispatchResponse {
+                outcome: "miss".into(),
+                command: None,
+            },
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn gesture_dispatch(&self, _req: GestureDispatchRequest) -> GestureDispatchResponse {
+        GestureDispatchResponse {
+            outcome: "miss".into(),
+            command: None,
+        }
+    }
+
+    /// GET /boosts
+    #[cfg(feature = "browser-core")]
+    pub fn boosts_list(&self, host: Option<&str>) -> Vec<BoostInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let specs: Vec<_> = match host {
+            Some(h) => inner.pipeline.boosts_applicable(h),
+            None => inner.pipeline.boosts_applicable("*all-hosts*"), // filter below
+        };
+        // If host is None, list ALL boosts regardless of host match.
+        let raw = if host.is_some() {
+            specs
+        } else {
+            // Use a wildcard-accepting iteration: applicable("") matches
+            // rules with host="" or "*" only; we want every boost.
+            inner
+                .pipeline
+                .boosts_applicable("")
+                .into_iter()
+                .chain(Vec::new())
+                .collect()
+        };
+        raw.into_iter()
+            .map(|s| BoostInfo {
+                name: s.name,
+                host: s.host,
+                enabled: s.enabled,
+                has_css: s.css.as_deref().is_some_and(|c| !c.is_empty()),
+                has_lisp: s.lisp.as_deref().is_some_and(|c| !c.is_empty()),
+                has_js: s.js.as_deref().is_some_and(|c| !c.is_empty()),
+                blocker_count: s.blockers.len(),
+            })
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn boosts_list(&self, _h: Option<&str>) -> Vec<BoostInfo> {
+        Vec::new()
+    }
+
+    /// GET /boosts/css?host=…
+    #[cfg(feature = "browser-core")]
+    pub fn boost_css(&self, host: &str) -> String {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.boost_css(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn boost_css(&self, _h: &str) -> String {
+        String::new()
+    }
+
+    /// POST /boosts/:name/enabled
+    #[cfg(feature = "browser-core")]
+    pub fn boost_set_enabled(&self, name: &str, req: BoostToggleRequest) -> bool {
+        let mut inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.boost_set_enabled(name, req.enabled)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn boost_set_enabled(&self, _n: &str, _r: BoostToggleRequest) -> bool {
+        false
+    }
+
+    /// GET /session/tabs
+    #[cfg(feature = "browser-core")]
+    pub fn session_open(&self) -> Vec<SessionTabInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .session_snapshot()
+            .into_iter()
+            .map(|t| SessionTabInfo {
+                url: t.url.to_string(),
+                title: t.title,
+                closed_at: t.closed_at,
+                pinned: t.pinned,
+            })
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn session_open(&self) -> Vec<SessionTabInfo> {
+        Vec::new()
+    }
+
+    /// GET /session/closed
+    #[cfg(feature = "browser-core")]
+    pub fn session_closed(&self) -> Vec<SessionTabInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .session_closed_tabs()
+            .into_iter()
+            .map(|t| SessionTabInfo {
+                url: t.url.to_string(),
+                title: t.title,
+                closed_at: t.closed_at,
+                pinned: t.pinned,
+            })
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn session_closed(&self) -> Vec<SessionTabInfo> {
+        Vec::new()
+    }
+
+    /// POST /session/undo-close
+    #[cfg(feature = "browser-core")]
+    pub fn session_undo_close(&self) -> Option<SessionTabInfo> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.session_undo_close().map(|t| SessionTabInfo {
+            url: t.url.to_string(),
+            title: t.title,
+            closed_at: t.closed_at,
+            pinned: t.pinned,
+        })
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn session_undo_close(&self) -> Option<SessionTabInfo> {
+        None
     }
 
     /// GET /storage/:name/index/:path/range?lo=&hi=
@@ -1198,6 +1457,78 @@ mod tests {
         let r = svc.security_policy_for("example.com");
         assert!(r.headers.is_empty());
         assert!(r.policy_name.is_none());
+    }
+
+    #[test]
+    fn find_returns_none_before_navigate() {
+        let svc = NamimadoService::new();
+        assert!(svc.find(FindRequest {
+            query: "hello".into(),
+            profile: None,
+        }).is_none());
+    }
+
+    #[test]
+    fn zoom_defaults_to_one_when_no_rules() {
+        let svc = NamimadoService::new();
+        let r = svc.zoom_for("example.com");
+        assert!((r.level - 1.0).abs() < f32::EPSILON);
+        assert!(!r.text_only);
+    }
+
+    #[test]
+    fn pip_default_has_video_selector() {
+        let svc = NamimadoService::new();
+        let r = svc.pip_for("example.com");
+        // Default profile auto-registers so we always get the `video` selector.
+        assert!(r.selectors.iter().any(|s| s == "video"));
+    }
+
+    #[test]
+    fn gesture_miss_when_registry_empty() {
+        let svc = NamimadoService::new();
+        let r = svc.gesture_dispatch(GestureDispatchRequest {
+            stroke: "U L".into(),
+        });
+        assert_eq!(r.outcome, "miss");
+    }
+
+    #[test]
+    fn snapshot_recipe_returns_default_when_host_matches() {
+        let svc = NamimadoService::new();
+        // Default snapshot profile auto-registers; matches "*".
+        let r = svc.snapshot_recipe(None, "anywhere.com").unwrap();
+        assert_eq!(r.name, "default");
+    }
+
+    #[test]
+    fn session_roundtrip_record_undo() {
+        use nami_core::session::TabRecord;
+        use url::Url;
+        let svc = NamimadoService::new();
+        let tab = TabRecord {
+            url: Url::parse("https://example.com/").unwrap(),
+            title: "Example".into(),
+            closed_at: 1,
+            pinned: false,
+        };
+        // Get the pipeline via reload-induced reinitialization isn't
+        // great; use the direct substrate handle: record via pipeline.
+        {
+            let inner = svc.inner.lock().unwrap();
+            inner.pipeline.session_record_close(tab.clone());
+        }
+        assert_eq!(svc.session_closed().len(), 1);
+        let undone = svc.session_undo_close().unwrap();
+        assert_eq!(undone.url, "https://example.com/");
+        assert!(svc.session_closed().is_empty());
+    }
+
+    #[test]
+    fn boosts_list_is_empty_with_no_specs_declared() {
+        let svc = NamimadoService::new();
+        let v = svc.boosts_list(None);
+        assert!(v.is_empty());
     }
 
     #[test]

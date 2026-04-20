@@ -205,6 +205,12 @@ pub struct RulesInventory {
     pub omniboxes: Vec<String>,
     pub i18n: Vec<String>,
     pub security_policies: Vec<String>,
+    pub finds: Vec<String>,
+    pub zooms: Vec<String>,
+    pub snapshots: Vec<String>,
+    pub pips: Vec<String>,
+    pub gestures: Vec<String>,
+    pub boosts: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -270,6 +276,104 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// POST /find — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FindRequest {
+    /// Free-text query; empty returns zero hits.
+    pub query: String,
+    /// Named profile. None → built-in default.
+    #[serde(default)]
+    pub profile: Option<String>,
+}
+
+/// POST /find — one match row.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FindMatchInfo {
+    pub enclosing_tag: Option<String>,
+    pub text_node_index: usize,
+    pub offset: usize,
+    pub matched: String,
+}
+
+/// POST /find — response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FindResponse {
+    pub query: String,
+    pub profile: String,
+    pub matches: Vec<FindMatchInfo>,
+}
+
+/// GET /zoom?host=… — per-host zoom.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ZoomResponse {
+    pub host: String,
+    pub level: f32,
+    pub text_only: bool,
+}
+
+/// GET /snapshot/recipe?host=…&name=…
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SnapshotRecipeResponse {
+    pub name: String,
+    pub region: String,
+    pub format: String,
+    pub scale: f32,
+    pub quality: f32,
+    pub selector: Option<String>,
+    pub attest: bool,
+}
+
+/// GET /pip?host=…
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct PipResponse {
+    pub host: String,
+    pub name: Option<String>,
+    pub selectors: Vec<String>,
+    pub position: String,
+    pub auto_activate: bool,
+    pub always_on_top: bool,
+}
+
+/// POST /gesture/dispatch — input.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GestureDispatchRequest {
+    pub stroke: String,
+}
+
+/// POST /gesture/dispatch — response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GestureDispatchResponse {
+    pub outcome: String, // "run" | "miss"
+    pub command: Option<String>,
+}
+
+/// GET /boosts — one row per boost.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BoostInfo {
+    pub name: String,
+    pub host: String,
+    pub enabled: bool,
+    pub has_css: bool,
+    pub has_lisp: bool,
+    pub has_js: bool,
+    pub blocker_count: usize,
+}
+
+/// POST /boosts/:name/enabled — toggle body.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BoostToggleRequest {
+    pub enabled: bool,
+}
+
+/// GET /session/tabs + snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SessionTabInfo {
+    pub url: String,
+    pub title: String,
+    pub closed_at: u64,
+    pub pinned: bool,
 }
 
 /// GET /i18n/:namespace — translations for a namespace.
