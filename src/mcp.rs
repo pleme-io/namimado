@@ -109,6 +109,21 @@ struct ExtensionInstallToolRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct SpaceNameRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SidebarsListToolRequest {
+    host: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SplitNameRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct JsEvalToolRequest {
     source: String,
     profile: Option<String>,
@@ -735,6 +750,88 @@ impl NamimadoMcpServer {
                 "extension_unknown: {}",
                 req.name
             )))
+        }
+    }
+
+    #[tool(description = "List every (defspace) — Arc-style grouped tabs with per-space state.")]
+    async fn spaces_list(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.spaces_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SpaceSpec for one space.")]
+    async fn space_get(
+        &self,
+        Parameters(req): Parameters<SpaceNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.space_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "space_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Activate a space — affects sidebar visibility and space-state.")]
+    async fn space_activate(
+        &self,
+        Parameters(req): Parameters<SpaceNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.space_activate(&req.name) {
+            Some(r) => Ok(ToolResponse::success(
+                &serde_json::to_value(&r).unwrap_or_default(),
+            )),
+            None => Ok(ToolResponse::error(&format!(
+                "space_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "Currently-active space name, or null.")]
+    async fn space_active(&self) -> Result<CallToolResult, McpError> {
+        let r = self.service.space_active();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&r).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(
+        description = "List (defsidebar) apps, optionally filtered to those \
+                       visible under a host (honors space + host gates)."
+    )]
+    async fn sidebars_list(
+        &self,
+        Parameters(req): Parameters<SidebarsListToolRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let v = self.service.sidebars_list(req.host.as_deref());
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defsplit) layout.")]
+    async fn splits_list(&self) -> Result<CallToolResult, McpError> {
+        let v = self.service.splits_list();
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&v).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full SplitSpec for one layout.")]
+    async fn split_get(
+        &self,
+        Parameters(req): Parameters<SplitNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.split_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "split_unknown: {}",
+                req.name
+            ))),
         }
     }
 

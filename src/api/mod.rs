@@ -212,6 +212,9 @@ pub struct RulesInventory {
     pub gestures: Vec<String>,
     pub boosts: Vec<String>,
     pub js_runtimes: Vec<String>,
+    pub spaces: Vec<String>,
+    pub sidebars: Vec<String>,
+    pub splits: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
@@ -277,6 +280,18 @@ pub struct StorageSummary {
 pub struct StorageEntry {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+/// POST /spaces/:name/activate — response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SpaceActivateResponse {
+    pub active: String,
+}
+
+/// GET /spaces/active — response.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SpaceActiveResponse {
+    pub active: Option<String>,
 }
 
 /// POST /js/eval — input.

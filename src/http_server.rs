@@ -22,9 +22,9 @@ use crate::api::{
     GestureDispatchResponse, HistoryInfo, I18nCoverage, I18nResponse, JsEvalRequest,
     JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse, PipResponse,
     ReaderResponse, ReloadResponse, ReportResponse, RulesInventory, SecurityPolicyResponse,
-    SessionTabInfo, SnapshotRecipeResponse, StateCellValue, StatusResponse, StorageEntry,
-    StorageIndexSummary, StorageSetRequest, StorageSummary, TrustdbKeyRequest,
-    VerifyExtensionResponse, ZoomResponse,
+    SessionTabInfo, SnapshotRecipeResponse, SpaceActivateResponse, SpaceActiveResponse,
+    StateCellValue, StatusResponse, StorageEntry, StorageIndexSummary, StorageSetRequest,
+    StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::service::NamimadoService;
 
@@ -69,6 +69,13 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/spaces", get(handle_spaces_list))
+        .route("/spaces/active", get(handle_space_active).delete(handle_space_deactivate))
+        .route("/spaces/:name", get(handle_space_get))
+        .route("/spaces/:name/activate", post(handle_space_activate))
+        .route("/sidebars", get(handle_sidebars_list))
+        .route("/splits", get(handle_splits_list))
+        .route("/splits/:name", get(handle_split_get))
         .route("/js/eval", post(handle_js_eval))
         .route("/find", post(handle_find))
         .route("/zoom", get(handle_zoom))
@@ -451,6 +458,76 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_spaces_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.spaces_list())
+}
+
+async fn handle_space_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.space_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("space_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_space_activate(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<SpaceActivateResponse>, ApiErrorResponse> {
+    svc.space_activate(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("space_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_space_active(State(svc): State<NamimadoService>) -> Json<SpaceActiveResponse> {
+    Json(svc.space_active())
+}
+
+async fn handle_space_deactivate(State(svc): State<NamimadoService>) -> StatusCode {
+    svc.space_deactivate();
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct SidebarsQuery {
+    #[serde(default)]
+    host: Option<String>,
+}
+
+async fn handle_sidebars_list(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<SidebarsQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.sidebars_list(q.host.as_deref()))
+}
+
+async fn handle_splits_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.splits_list())
+}
+
+async fn handle_split_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.split_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("split_unknown").with_detail(name),
+        )
+    })
 }
 
 async fn handle_js_eval(

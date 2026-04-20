@@ -50,7 +50,10 @@ use nami_core::js_runtime::{
 use nami_core::omnibox::{OmniboxRegistry, OmniboxSpec};
 use nami_core::pip::{PipRegistry, PipSpec};
 use nami_core::session::{SessionSpec, SessionStore, TabRecord};
+use nami_core::sidebar::{SidebarRegistry, SidebarSpec};
 use nami_core::snapshot::{SnapshotRegistry, SnapshotSpec};
+use nami_core::space::{SpaceRegistry, SpaceSpec, SpaceState};
+use nami_core::split::{SplitRegistry, SplitSpec};
 use nami_core::zoom::{ZoomRegistry, ZoomSpec};
 use nami_core::reader::{ReaderOutput, ReaderRegistry, ReaderSpec};
 use nami_core::security_policy::{
@@ -163,6 +166,10 @@ pub struct SubstratePipeline {
     /// Active runtime implementation. MicroEval today; real engines
     /// drop in behind feature flags via this same trait object.
     js_engine: Arc<dyn JsRuntime>,
+    spaces: SpaceRegistry,
+    space_state: Arc<std::sync::Mutex<SpaceState>>,
+    sidebars: SidebarRegistry,
+    splits: SplitRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -205,6 +212,9 @@ pub struct SubstratePipeline {
     gesture_strokes: Vec<String>,
     boost_names: Vec<String>,
     js_runtime_names: Vec<String>,
+    space_names: Vec<String>,
+    sidebar_names: Vec<String>,
+    split_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -424,6 +434,29 @@ impl SubstratePipeline {
         let mut boosts = BoostRegistry::new();
         boosts.extend(boost_specs);
 
+        // Arc pack — spaces, sidebars, splits.
+        let space_specs: Vec<SpaceSpec> =
+            nami_core::space::compile(&ext_src).unwrap_or_default();
+        let space_names: Vec<String> =
+            space_specs.iter().map(|s| s.name.clone()).collect();
+        let mut spaces = SpaceRegistry::new();
+        spaces.extend(space_specs);
+        let space_state = Arc::new(std::sync::Mutex::new(SpaceState::new()));
+
+        let sidebar_specs: Vec<SidebarSpec> =
+            nami_core::sidebar::compile(&ext_src).unwrap_or_default();
+        let sidebar_names: Vec<String> =
+            sidebar_specs.iter().map(|s| s.name.clone()).collect();
+        let mut sidebars = SidebarRegistry::new();
+        sidebars.extend(sidebar_specs);
+
+        let split_specs: Vec<SplitSpec> =
+            nami_core::split::compile(&ext_src).unwrap_or_default();
+        let split_names: Vec<String> =
+            split_specs.iter().map(|s| s.name.clone()).collect();
+        let mut splits = SplitRegistry::new();
+        splits.extend(split_specs);
+
         // JS runtime specs — always include a "default" micro-eval
         // profile so POST /js/eval works out of the box.
         let js_specs: Vec<JsRuntimeSpec> =
@@ -545,7 +578,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -576,6 +609,9 @@ impl SubstratePipeline {
             gestures.len(),
             boosts.len(),
             js_runtimes.len(),
+            spaces.len(),
+            sidebars.len(),
+            splits.len(),
         );
 
         Self {
@@ -605,6 +641,10 @@ impl SubstratePipeline {
             boosts,
             js_runtimes,
             js_engine,
+            spaces,
+            space_state,
+            sidebars,
+            splits,
             session_store,
             session_spec,
             wasm_agents,
@@ -642,7 +682,72 @@ impl SubstratePipeline {
             gesture_strokes,
             boost_names,
             js_runtime_names,
+            space_names,
+            sidebar_names,
+            split_names,
         }
+    }
+
+    // ── Arc-pack accessors ───────────────────────────────────────
+
+    #[must_use]
+    pub fn spaces_list(&self) -> Vec<SpaceSpec> {
+        self.spaces.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn space_get(&self, name: &str) -> Option<SpaceSpec> {
+        self.spaces.get(name).cloned()
+    }
+
+    pub fn space_activate(&self, name: &str) -> bool {
+        if self.spaces.get(name).is_none() {
+            return false;
+        }
+        let Ok(mut st) = self.space_state.lock() else {
+            return false;
+        };
+        st.activate(name);
+        true
+    }
+
+    pub fn space_deactivate(&self) {
+        if let Ok(mut st) = self.space_state.lock() {
+            st.deactivate();
+        }
+    }
+
+    #[must_use]
+    pub fn space_active(&self) -> Option<String> {
+        self.space_state
+            .lock()
+            .ok()
+            .and_then(|st| st.active().map(str::to_owned))
+    }
+
+    #[must_use]
+    pub fn sidebars_list(&self) -> Vec<SidebarSpec> {
+        self.sidebars.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn sidebars_visible(&self, host: &str) -> Vec<SidebarSpec> {
+        let active = self.space_active();
+        self.sidebars
+            .visible(active.as_deref(), host)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    #[must_use]
+    pub fn splits_list(&self) -> Vec<SplitSpec> {
+        self.splits.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn split_get(&self, name: &str) -> Option<SplitSpec> {
+        self.splits.get(name).cloned()
     }
 
     /// Names of every declared JsRuntime profile.
@@ -1133,6 +1238,9 @@ impl SubstratePipeline {
             gestures: self.gesture_strokes.clone(),
             boosts: self.boost_names.clone(),
             js_runtimes: self.js_runtime_names.clone(),
+            spaces: self.space_names.clone(),
+            sidebars: self.sidebar_names.clone(),
+            splits: self.split_names.clone(),
         }
     }
 

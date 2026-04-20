@@ -27,8 +27,8 @@ use crate::api::{
     JsEvalRequest, JsEvalResponse, NavigateRequest, NavigateResponse, OmniboxResponse,
     OmniboxSuggestion, PipResponse, ReaderResponse, ReloadResponse, ReportResponse,
     RulesInventory, SecurityPolicyResponse, SessionTabInfo, SnapshotRecipeResponse,
-    StateCellValue, StatusResponse, StorageEntry, StorageSetRequest, StorageSummary,
-    TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
+    SpaceActivateResponse, SpaceActiveResponse, StateCellValue, StatusResponse, StorageEntry,
+    StorageSetRequest, StorageSummary, TrustdbKeyRequest, VerifyExtensionResponse, ZoomResponse,
 };
 use crate::browser::bookmark::{Bookmark, BookmarkManager};
 use crate::browser::history::HistoryManager;
@@ -580,6 +580,131 @@ impl NamimadoService {
             profile: profile.unwrap_or("default").to_owned(),
             suggestions: Vec::new(),
         }
+    }
+
+    /// GET /spaces — list all declared spaces.
+    #[cfg(feature = "browser-core")]
+    pub fn spaces_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .spaces_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn spaces_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /spaces/:name
+    #[cfg(feature = "browser-core")]
+    pub fn space_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .space_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn space_get(&self, _n: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// POST /spaces/:name/activate
+    #[cfg(feature = "browser-core")]
+    pub fn space_activate(&self, name: &str) -> Option<SpaceActivateResponse> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        if inner.pipeline.space_activate(name) {
+            Some(SpaceActivateResponse {
+                active: name.to_owned(),
+            })
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn space_activate(&self, _n: &str) -> Option<SpaceActivateResponse> {
+        None
+    }
+
+    /// GET /spaces/active
+    #[cfg(feature = "browser-core")]
+    pub fn space_active(&self) -> SpaceActiveResponse {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        SpaceActiveResponse {
+            active: inner.pipeline.space_active(),
+        }
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn space_active(&self) -> SpaceActiveResponse {
+        SpaceActiveResponse { active: None }
+    }
+
+    /// DELETE /spaces/active
+    #[cfg(feature = "browser-core")]
+    pub fn space_deactivate(&self) {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.space_deactivate();
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn space_deactivate(&self) {}
+
+    /// GET /sidebars[?host=…]
+    #[cfg(feature = "browser-core")]
+    pub fn sidebars_list(&self, host: Option<&str>) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        let specs = match host {
+            Some(h) => inner.pipeline.sidebars_visible(h),
+            None => inner.pipeline.sidebars_list(),
+        };
+        specs
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn sidebars_list(&self, _h: Option<&str>) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /splits
+    #[cfg(feature = "browser-core")]
+    pub fn splits_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .splits_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn splits_list(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// GET /splits/:name
+    #[cfg(feature = "browser-core")]
+    pub fn split_get(&self, name: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .split_get(name)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn split_get(&self, _n: &str) -> Option<serde_json::Value> {
+        None
     }
 
     /// POST /js/eval — run script through the active JsRuntime.
@@ -1627,6 +1752,39 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn spaces_list_empty_without_declarations() {
+        let svc = NamimadoService::new();
+        assert!(svc.spaces_list().is_empty());
+    }
+
+    #[test]
+    fn space_activate_unknown_returns_none() {
+        let svc = NamimadoService::new();
+        assert!(svc.space_activate("nonexistent").is_none());
+    }
+
+    #[test]
+    fn space_active_starts_null() {
+        let svc = NamimadoService::new();
+        let r = svc.space_active();
+        assert!(r.active.is_none());
+    }
+
+    #[test]
+    fn sidebars_list_empty_when_none_declared() {
+        let svc = NamimadoService::new();
+        assert!(svc.sidebars_list(None).is_empty());
+        assert!(svc.sidebars_list(Some("example.com")).is_empty());
+    }
+
+    #[test]
+    fn splits_list_empty_when_none_declared() {
+        let svc = NamimadoService::new();
+        assert!(svc.splits_list().is_empty());
+        assert!(svc.split_get("anything").is_none());
     }
 
     #[test]

@@ -207,6 +207,14 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/session/closed", "Recently-closed tabs, newest first."),
         mk("POST", "/session/undo-close", "Pop the most-recently-closed tab (Cmd+Shift+T)."),
         mk("POST", "/js/eval", "Evaluate JS-ish source through the active (defjs-runtime) engine."),
+        mk("GET", "/spaces", "Every (defspace) declaration."),
+        mk("GET", "/spaces/active", "Currently active space name (or null)."),
+        mk("DELETE", "/spaces/active", "Deactivate — clear the active-space slot."),
+        mk("GET", "/spaces/:name", "Full SpaceSpec for one space."),
+        mk("POST", "/spaces/:name/activate", "Activate a space."),
+        mk("GET", "/sidebars", "List (defsidebar) apps; `?host=…` filters to visible-under."),
+        mk("GET", "/splits", "Every (defsplit) layout."),
+        mk("GET", "/splits/:name", "Full SplitSpec for one layout."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -269,6 +277,13 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("session_closed", "Recently-closed session tabs."),
         mk("session_undo_close", "Pop the most-recently-closed tab."),
         mk("js_eval", "Evaluate JS-ish source through the active JsRuntime."),
+        mk("spaces_list", "List all (defspace) declarations."),
+        mk("space_get", "Full SpaceSpec for one space."),
+        mk("space_activate", "Activate a space."),
+        mk("space_active", "Currently active space."),
+        mk("sidebars_list", "List (defsidebar) apps, optionally by host."),
+        mk("splits_list", "List all (defsplit) layouts."),
+        mk("split_get", "Full SplitSpec for one layout."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -392,6 +407,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 31, "31 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 34, "34 DSL keywords expected in nami-core");
     }
 }
