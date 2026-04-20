@@ -63,6 +63,9 @@ use nami_core::passwords::{PasswordsRegistry, PasswordsSpec};
 use nami_core::secure_note::{SecureNoteRegistry, SecureNoteSpec};
 use nami_core::summarize::{SummarizeRegistry, SummarizeSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
+use nami_core::cast::{CastRegistry, CastSpec};
+use nami_core::media_session::{MediaSessionRegistry, MediaSessionSpec};
+use nami_core::subtitle::{SubtitleRegistry, SubtitleSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
 use nami_core::download::{DownloadRegistry, DownloadSpec};
 use nami_core::offline::{OfflineRegistry, OfflineSpec};
@@ -219,6 +222,9 @@ pub struct SubstratePipeline {
     summarizes: SummarizeRegistry,
     chats: ChatRegistry,
     llm_completions: LlmCompletionRegistry,
+    media_sessions: MediaSessionRegistry,
+    casts: CastRegistry,
+    subtitles: SubtitleRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -287,6 +293,9 @@ pub struct SubstratePipeline {
     summarize_names: Vec<String>,
     chat_names: Vec<String>,
     llm_completion_names: Vec<String>,
+    media_session_names: Vec<String>,
+    cast_names: Vec<String>,
+    subtitle_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -564,6 +573,49 @@ impl SubstratePipeline {
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
 
+        // Media pack — lock-screen session, cast receivers, subtitles.
+        let media_session_specs: Vec<MediaSessionSpec> =
+            nami_core::media_session::compile(&ext_src).unwrap_or_default();
+        let media_session_names: Vec<String> = if media_session_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            media_session_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut media_sessions = MediaSessionRegistry::new();
+        if media_session_specs.is_empty() {
+            media_sessions.insert(MediaSessionSpec::default_profile());
+        } else {
+            media_sessions.extend(media_session_specs);
+        }
+
+        let cast_specs: Vec<CastSpec> =
+            nami_core::cast::compile(&ext_src).unwrap_or_default();
+        let cast_names: Vec<String> = if cast_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            cast_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut casts = CastRegistry::new();
+        if cast_specs.is_empty() {
+            casts.insert(CastSpec::default_profile());
+        } else {
+            casts.extend(cast_specs);
+        }
+
+        let subtitle_specs: Vec<SubtitleSpec> =
+            nami_core::subtitle::compile(&ext_src).unwrap_or_default();
+        let subtitle_names: Vec<String> = if subtitle_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            subtitle_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut subtitles = SubtitleRegistry::new();
+        if subtitle_specs.is_empty() {
+            subtitles.insert(SubtitleSpec::default_profile());
+        } else {
+            subtitles.extend(subtitle_specs);
+        }
+
         // AI pack — providers, summarize, chat, inline completion.
         let llm_provider_specs: Vec<LlmProviderSpec> =
             nami_core::llm::compile(&ext_src).unwrap_or_default();
@@ -834,7 +886,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -891,6 +943,9 @@ impl SubstratePipeline {
             summarizes.len(),
             chats.len(),
             llm_completions.len(),
+            media_sessions.len(),
+            casts.len(),
+            subtitles.len(),
         );
 
         Self {
@@ -948,6 +1003,9 @@ impl SubstratePipeline {
             summarizes,
             chats,
             llm_completions,
+            media_sessions,
+            casts,
+            subtitles,
             session_store,
             session_spec,
             wasm_agents,
@@ -1011,7 +1069,42 @@ impl SubstratePipeline {
             summarize_names,
             chat_names,
             llm_completion_names,
+            media_session_names,
+            cast_names,
+            subtitle_names,
         }
+    }
+
+    // ── Media pack ───────────────────────────────────────────────
+
+    #[must_use]
+    pub fn media_session_list(&self) -> Vec<MediaSessionSpec> {
+        self.media_sessions.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn media_session_for(&self, host: &str) -> Option<MediaSessionSpec> {
+        self.media_sessions.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn cast_list(&self) -> Vec<CastSpec> {
+        self.casts.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn cast_applicable(&self, host: &str) -> Vec<CastSpec> {
+        self.casts.applicable(host).into_iter().cloned().collect()
+    }
+
+    #[must_use]
+    pub fn subtitle_list(&self) -> Vec<SubtitleSpec> {
+        self.subtitles.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn subtitle_for(&self, host: &str) -> Option<SubtitleSpec> {
+        self.subtitles.resolve(host).cloned()
     }
 
     // ── AI pack ──────────────────────────────────────────────────
@@ -1918,6 +2011,9 @@ impl SubstratePipeline {
             summarizes: self.summarize_names.clone(),
             chats: self.chat_names.clone(),
             llm_completions: self.llm_completion_names.clone(),
+            media_sessions: self.media_session_names.clone(),
+            casts: self.cast_names.clone(),
+            subtitles: self.subtitle_names.clone(),
         }
     }
 

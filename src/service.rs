@@ -584,6 +584,83 @@ impl NamimadoService {
         }
     }
 
+    // ── Media pack ───────────────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn media_session_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .media_session_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn media_session_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .media_session_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cast_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cast_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn cast_applicable(&self, host: &str) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .cast_applicable(host)
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn subtitle_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .subtitle_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn subtitle_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .subtitle_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn media_session_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn media_session_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cast_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn cast_applicable(&self, _h: &str) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn subtitle_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn subtitle_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── AI pack ──────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2414,6 +2491,18 @@ mod tests {
         let r = svc.js_eval(req);
         assert_eq!(r.outcome, "error");
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn media_pack_defaults_auto_load() {
+        let svc = NamimadoService::new();
+        // Defaults auto-register so lists are non-empty.
+        assert!(!svc.media_session_list().is_empty());
+        assert!(!svc.cast_list().is_empty());
+        assert!(!svc.subtitle_list().is_empty());
+        assert!(svc.media_session_for("example.com").is_some());
+        assert!(!svc.cast_applicable("example.com").is_empty());
+        assert!(svc.subtitle_for("example.com").is_some());
     }
 
     #[test]

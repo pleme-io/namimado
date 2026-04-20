@@ -72,6 +72,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/media-sessions", get(handle_media_session_list))
+        .route("/media-sessions/resolve", get(handle_media_session_for))
+        .route("/casts", get(handle_cast_list))
+        .route("/casts/applicable", get(handle_cast_applicable))
+        .route("/subtitles", get(handle_subtitle_list))
+        .route("/subtitles/resolve", get(handle_subtitle_for))
         .route("/llm-providers", get(handle_llm_provider_list))
         .route("/summarize", get(handle_summarize_list).post(handle_summarize_run))
         .route("/chat", get(handle_chat_list).post(handle_chat_ask))
@@ -495,6 +501,57 @@ async fn handle_storage_by_index(
                 StatusCode::NOT_FOUND,
                 ApiError::new("storage_or_index_unknown")
                     .with_detail(format!("{name}/{path}")),
+            )
+        })
+}
+
+async fn handle_media_session_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.media_session_list())
+}
+
+async fn handle_media_session_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.media_session_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_media_session_matches"),
+            )
+        })
+}
+
+async fn handle_cast_list(State(svc): State<NamimadoService>) -> Json<Vec<serde_json::Value>> {
+    Json(svc.cast_list())
+}
+
+async fn handle_cast_applicable(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.cast_applicable(&q.host.unwrap_or_default()))
+}
+
+async fn handle_subtitle_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.subtitle_list())
+}
+
+async fn handle_subtitle_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.subtitle_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_subtitle_matches"),
             )
         })
 }

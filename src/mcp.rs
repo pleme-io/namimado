@@ -798,6 +798,60 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defmedia-session) profile.")]
+    async fn media_session_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.media_session_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve (defmedia-session) for a host.")]
+    async fn media_session_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.media_session_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_media_session_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defcast) profile.")]
+    async fn cast_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.cast_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Cast profiles applicable to a host.")]
+    async fn cast_applicable(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.cast_applicable(&req.host))
+                .unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "List every (defsubtitle) profile.")]
+    async fn subtitle_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.subtitle_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolve (defsubtitle) for a host.")]
+    async fn subtitle_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.subtitle_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_subtitle_matches")),
+        }
+    }
+
     #[tool(description = "List every (defllm-provider) declaration.")]
     async fn llm_provider_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

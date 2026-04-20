@@ -238,6 +238,9 @@ pub struct RulesInventory {
     pub summarizes: Vec<String>,
     pub chats: Vec<String>,
     pub llm_completions: Vec<String>,
+    pub media_sessions: Vec<String>,
+    pub casts: Vec<String>,
+    pub subtitles: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

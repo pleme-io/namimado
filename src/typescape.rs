@@ -253,6 +253,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("POST", "/chat", "Ask a chat profile — body { profile, question, page_context?, history? }."),
         mk("GET", "/llm-completion", "Every (defllm-completion) profile."),
         mk("POST", "/llm-completion", "Run a completion profile — body { profile, prefix }."),
+        mk("GET", "/media-sessions", "Every (defmedia-session) profile."),
+        mk("GET", "/media-sessions/resolve", "Media-session profile for `?host=…`."),
+        mk("GET", "/casts", "Every (defcast) profile."),
+        mk("GET", "/casts/applicable", "Cast profiles applicable to `?host=…`."),
+        mk("GET", "/subtitles", "Every (defsubtitle) profile."),
+        mk("GET", "/subtitles/resolve", "Subtitle profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -360,6 +366,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("chat_ask", "Ask a chat profile against page context + history."),
         mk("llm_completion_list", "Every (defllm-completion) profile."),
         mk("llm_completion_run", "Run a completion profile against a prefix."),
+        mk("media_session_list", "Every (defmedia-session) profile."),
+        mk("media_session_for", "Media-session profile for a host."),
+        mk("cast_list", "Every (defcast) profile."),
+        mk("cast_applicable", "Cast profiles applicable to a host."),
+        mk("subtitle_list", "Every (defsubtitle) profile."),
+        mk("subtitle_for", "Subtitle profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -483,6 +495,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 57, "57 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 60, "60 DSL keywords expected in nami-core");
     }
 }
