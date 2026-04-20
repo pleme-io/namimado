@@ -1966,6 +1966,41 @@ impl NamimadoService {
         _kind: Option<&str>,
     ) -> Option<bool> { None }
 
+    // ── Tab attestation (per-tab BLAKE3 chain spec) ──────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_attestation_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .tab_attestation_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_attestation_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .tab_attestation_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn tab_attestation_should_chain(&self, host: &str) -> bool {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.tab_attestation_should_chain(host)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_attestation_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_attestation_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn tab_attestation_should_chain(&self, _h: &str) -> bool { false }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -4122,6 +4157,14 @@ mod tests {
         let css = svc.text_spacing_css("example.com").unwrap();
         assert!(css.contains("line-height: 1.5"));
         assert!(css.contains("!important"));
+    }
+
+    #[test]
+    fn tab_attestation_default_is_privacy_first() {
+        let svc = NamimadoService::new();
+        // Default profile auto-registers but is DISABLED → should not chain.
+        assert!(!svc.tab_attestation_list().is_empty());
+        assert!(!svc.tab_attestation_should_chain("example.com"));
     }
 
     #[test]

@@ -100,6 +100,7 @@ use nami_core::cookie_banner::{CookieBannerRegistry, CookieBannerSpec};
 use nami_core::smart_bookmark::{SmartBookmarkRegistry, SmartBookmarkSpec};
 use nami_core::text_spacing::{TextSpacingRegistry, TextSpacingSpec};
 use nami_core::autoplay::{AutoplayRegistry, AutoplaySpec};
+use nami_core::tab_attestation::{TabAttestationRegistry, TabAttestationSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -311,6 +312,7 @@ pub struct SubstratePipeline {
     smart_bookmarks: SmartBookmarkRegistry,
     text_spacings: TextSpacingRegistry,
     autoplays: AutoplayRegistry,
+    tab_attestations: TabAttestationRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -425,6 +427,7 @@ pub struct SubstratePipeline {
     smart_bookmark_names: Vec<String>,
     text_spacing_names: Vec<String>,
     autoplay_names: Vec<String>,
+    tab_attestation_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1260,6 +1263,21 @@ impl SubstratePipeline {
             autoplays.extend(autoplay_specs);
         }
 
+        // Tab attestation — per-tab BLAKE3 integrity chain (disabled-by-default).
+        let tab_attestation_specs: Vec<TabAttestationSpec> =
+            nami_core::tab_attestation::compile(&ext_src).unwrap_or_default();
+        let tab_attestation_names: Vec<String> = if tab_attestation_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            tab_attestation_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut tab_attestations = TabAttestationRegistry::new();
+        if tab_attestation_specs.is_empty() {
+            tab_attestations.insert(TabAttestationSpec::default_profile());
+        } else {
+            tab_attestations.extend(tab_attestation_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1602,7 +1620,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay · {} tab-attestation",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1705,6 +1723,7 @@ impl SubstratePipeline {
             smart_bookmarks.len(),
             text_spacings.len(),
             autoplays.len(),
+            tab_attestations.len(),
         );
 
         Self {
@@ -1808,6 +1827,7 @@ impl SubstratePipeline {
             smart_bookmarks,
             text_spacings,
             autoplays,
+            tab_attestations,
             session_store,
             session_spec,
             wasm_agents,
@@ -1917,6 +1937,7 @@ impl SubstratePipeline {
             smart_bookmark_names,
             text_spacing_names,
             autoplay_names,
+            tab_attestation_names,
         }
     }
 
@@ -2570,6 +2591,28 @@ impl SubstratePipeline {
         ctx: nami_core::autoplay::PlaybackContext,
     ) -> Option<bool> {
         self.autoplays.resolve(host).map(|s| s.admits_autoplay(host, ctx))
+    }
+
+    // ── Tab attestation (per-tab BLAKE3 chain spec) ───────────────
+
+    #[must_use]
+    pub fn tab_attestation_list(&self) -> Vec<TabAttestationSpec> {
+        self.tab_attestations.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn tab_attestation_for(&self, host: &str) -> Option<TabAttestationSpec> {
+        self.tab_attestations.resolve(host).cloned()
+    }
+
+    /// Whether a tab opened on `host` should be chained (enabled +
+    /// matches + not exempt).
+    #[must_use]
+    pub fn tab_attestation_should_chain(&self, host: &str) -> bool {
+        self.tab_attestations
+            .resolve(host)
+            .map(|s| s.should_chain(host))
+            .unwrap_or(false)
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3615,6 +3658,7 @@ impl SubstratePipeline {
             smart_bookmarks: self.smart_bookmark_names.clone(),
             text_spacings: self.text_spacing_names.clone(),
             autoplays: self.autoplay_names.clone(),
+            tab_attestations: self.tab_attestation_names.clone(),
         }
     }
 

@@ -236,6 +236,9 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/autoplay", get(handle_autoplay_list))
         .route("/autoplay/resolve", get(handle_autoplay_for))
         .route("/autoplay/admits", get(handle_autoplay_admits))
+        .route("/tab-attestation", get(handle_tab_attestation_list))
+        .route("/tab-attestation/resolve", get(handle_tab_attestation_for))
+        .route("/tab-attestation/should-chain", get(handle_tab_attestation_should_chain))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1788,6 +1791,36 @@ async fn handle_autoplay_admits(
             ApiError::new("no_autoplay_matches"),
         )
     })
+}
+
+async fn handle_tab_attestation_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.tab_attestation_list())
+}
+
+async fn handle_tab_attestation_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.tab_attestation_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_tab_attestation_matches"),
+            )
+        })
+}
+
+async fn handle_tab_attestation_should_chain(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Json<serde_json::Value> {
+    let host = q.host.unwrap_or_default();
+    Json(serde_json::json!({
+        "should_chain": svc.tab_attestation_should_chain(&host),
+    }))
 }
 
 async fn handle_inspector_list(
