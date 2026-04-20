@@ -1906,6 +1906,66 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn text_spacing_css(&self, _h: &str) -> Option<String> { None }
 
+    // ── Autoplay (per-host media autoplay policy) ────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn autoplay_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .autoplay_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn autoplay_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .autoplay_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    /// `ctx`: `{muted, user_has_interacted, high_mei, tab_backgrounded, kind?}`.
+    /// `kind`: `audio-element|video-element|web-rtc|media-session`.
+    #[cfg(feature = "browser-core")]
+    pub fn autoplay_admits(
+        &self,
+        host: &str,
+        muted: bool,
+        user_has_interacted: bool,
+        high_mei: bool,
+        tab_backgrounded: bool,
+        kind: Option<&str>,
+    ) -> Option<bool> {
+        let ctx = nami_core::autoplay::PlaybackContext {
+            muted,
+            user_has_interacted,
+            high_mei,
+            tab_backgrounded,
+            kind: kind.and_then(parse_track_kind),
+        };
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner.pipeline.autoplay_admits(host, ctx)
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn autoplay_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn autoplay_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn autoplay_admits(
+        &self,
+        _h: &str,
+        _muted: bool,
+        _interacted: bool,
+        _mei: bool,
+        _bg: bool,
+        _kind: Option<&str>,
+    ) -> Option<bool> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -3518,6 +3578,18 @@ fn disabled_response() -> LlmResponseDto {
 }
 
 #[cfg(feature = "browser-core")]
+fn parse_track_kind(s: &str) -> Option<nami_core::autoplay::TrackKind> {
+    use nami_core::autoplay::TrackKind::*;
+    Some(match s {
+        "audio-element" => AudioElement,
+        "video-element" => VideoElement,
+        "web-rtc" => WebRtc,
+        "media-session" => MediaSession,
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "browser-core")]
 fn parse_tab_macro_trigger(s: &str) -> Option<nami_core::tab_macro::Trigger> {
     use nami_core::tab_macro::Trigger::*;
     Some(match s {
@@ -4050,6 +4122,28 @@ mod tests {
         let css = svc.text_spacing_css("example.com").unwrap();
         assert!(css.contains("line-height: 1.5"));
         assert!(css.contains("!important"));
+    }
+
+    #[test]
+    fn autoplay_default_blocks_unmuted_audio() {
+        let svc = NamimadoService::new();
+        assert!(!svc.autoplay_list().is_empty());
+        assert!(svc.autoplay_for("example.com").is_some());
+        // Unmuted, no interaction → blocked.
+        assert_eq!(
+            svc.autoplay_admits("example.com", false, false, false, false, Some("audio-element")),
+            Some(false)
+        );
+        // Muted video → allowed.
+        assert_eq!(
+            svc.autoplay_admits("example.com", true, false, false, false, Some("video-element")),
+            Some(true)
+        );
+        // After user interaction → allowed even unmuted.
+        assert_eq!(
+            svc.autoplay_admits("example.com", false, true, false, false, Some("audio-element")),
+            Some(true)
+        );
     }
 
     #[test]

@@ -241,6 +241,21 @@ struct EventKindRequest {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct AutoplayAdmitsRequest {
+    host: String,
+    #[serde(default)]
+    muted: bool,
+    #[serde(default)]
+    user_has_interacted: bool,
+    #[serde(default)]
+    high_mei: bool,
+    #[serde(default)]
+    tab_backgrounded: bool,
+    /// Optional track kind: audio-element|video-element|web-rtc|media-session.
+    kind: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct HistoryRecordRequest {
     host: String,
     url: String,
@@ -1896,6 +1911,44 @@ impl NamimadoMcpServer {
                 "css": css,
             }))),
             None => Ok(ToolResponse::error("no_text_spacing_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defautoplay) profile.")]
+    async fn autoplay_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.autoplay_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved autoplay profile for a host.")]
+    async fn autoplay_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.autoplay_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_autoplay_matches")),
+        }
+    }
+
+    #[tool(description = "Pure decision: may a media element autoplay? Returns {admits: bool}. kind ∈ audio-element|video-element|web-rtc|media-session.")]
+    async fn autoplay_admits(
+        &self,
+        Parameters(req): Parameters<AutoplayAdmitsRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.autoplay_admits(
+            &req.host,
+            req.muted,
+            req.user_has_interacted,
+            req.high_mei,
+            req.tab_backgrounded,
+            req.kind.as_deref(),
+        ) {
+            Some(admit) => Ok(ToolResponse::success(
+                &serde_json::json!({ "admits": admit }),
+            )),
+            None => Ok(ToolResponse::error("no_autoplay_matches")),
         }
     }
 

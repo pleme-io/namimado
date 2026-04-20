@@ -99,6 +99,7 @@ use nami_core::tab_macro::{TabMacroRegistry, TabMacroSpec};
 use nami_core::cookie_banner::{CookieBannerRegistry, CookieBannerSpec};
 use nami_core::smart_bookmark::{SmartBookmarkRegistry, SmartBookmarkSpec};
 use nami_core::text_spacing::{TextSpacingRegistry, TextSpacingSpec};
+use nami_core::autoplay::{AutoplayRegistry, AutoplaySpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -309,6 +310,7 @@ pub struct SubstratePipeline {
     cookie_banners: CookieBannerRegistry,
     smart_bookmarks: SmartBookmarkRegistry,
     text_spacings: TextSpacingRegistry,
+    autoplays: AutoplayRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -422,6 +424,7 @@ pub struct SubstratePipeline {
     cookie_banner_names: Vec<String>,
     smart_bookmark_names: Vec<String>,
     text_spacing_names: Vec<String>,
+    autoplay_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -1242,6 +1245,21 @@ impl SubstratePipeline {
             text_spacings.extend(text_spacing_specs);
         }
 
+        // Autoplay — per-host media autoplay policy.
+        let autoplay_specs: Vec<AutoplaySpec> =
+            nami_core::autoplay::compile(&ext_src).unwrap_or_default();
+        let autoplay_names: Vec<String> = if autoplay_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            autoplay_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut autoplays = AutoplayRegistry::new();
+        if autoplay_specs.is_empty() {
+            autoplays.insert(AutoplaySpec::default_profile());
+        } else {
+            autoplays.extend(autoplay_specs);
+        }
+
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
             nami_core::inspector::compile(&ext_src).unwrap_or_default();
@@ -1584,7 +1602,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} pull-refresh · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor · {} service-worker · {} sync · {} tab-group · {} tab-hibernate · {} tab-preview · {} search-engine · {} search-bang · {} identity · {} totp · {} fingerprint-randomize · {} cookie-jar · {} webgpu-policy · {} suggestion-source · {} suggestion-ranker · {} permission-policy · {} permission-prompt · {} resource-hint · {} bfcache-policy · {} prerender-rule · {} history-policy · {} navigation-intent · {} storage-quota · {} clear-site-data · {} audit-trail · {} viewport · {} csp-policy · {} network-throttle · {} time-travel · {} locale · {} tab-macro · {} cookie-banner · {} smart-bookmark · {} text-spacing · {} autoplay",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1686,6 +1704,7 @@ impl SubstratePipeline {
             cookie_banners.len(),
             smart_bookmarks.len(),
             text_spacings.len(),
+            autoplays.len(),
         );
 
         Self {
@@ -1788,6 +1807,7 @@ impl SubstratePipeline {
             cookie_banners,
             smart_bookmarks,
             text_spacings,
+            autoplays,
             session_store,
             session_spec,
             wasm_agents,
@@ -1896,6 +1916,7 @@ impl SubstratePipeline {
             cookie_banner_names,
             smart_bookmark_names,
             text_spacing_names,
+            autoplay_names,
         }
     }
 
@@ -2525,6 +2546,30 @@ impl SubstratePipeline {
     #[must_use]
     pub fn text_spacing_css(&self, host: &str) -> Option<String> {
         self.text_spacings.resolve(host).map(|s| s.render_css())
+    }
+
+    // ── Autoplay (per-host media autoplay policy) ────────────────
+
+    #[must_use]
+    pub fn autoplay_list(&self) -> Vec<AutoplaySpec> {
+        self.autoplays.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn autoplay_for(&self, host: &str) -> Option<AutoplaySpec> {
+        self.autoplays.resolve(host).cloned()
+    }
+
+    /// Pure decision for a playback context. Returns `None` if no
+    /// profile resolves (the page may autoplay by default), otherwise
+    /// `Some(admit)`.
+    #[must_use]
+    pub fn autoplay_admits(
+        &self,
+        host: &str,
+        ctx: nami_core::autoplay::PlaybackContext,
+    ) -> Option<bool> {
+        self.autoplays.resolve(host).map(|s| s.admits_autoplay(host, ctx))
     }
 
     /// {accept_language, primary, languages} headers for `host`.
@@ -3569,6 +3614,7 @@ impl SubstratePipeline {
             cookie_banners: self.cookie_banner_names.clone(),
             smart_bookmarks: self.smart_bookmark_names.clone(),
             text_spacings: self.text_spacing_names.clone(),
+            autoplays: self.autoplay_names.clone(),
         }
     }
 

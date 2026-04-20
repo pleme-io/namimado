@@ -233,6 +233,9 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/text-spacing", get(handle_text_spacing_list))
         .route("/text-spacing/resolve", get(handle_text_spacing_for))
         .route("/text-spacing/css", get(handle_text_spacing_css))
+        .route("/autoplay", get(handle_autoplay_list))
+        .route("/autoplay/resolve", get(handle_autoplay_for))
+        .route("/autoplay/admits", get(handle_autoplay_admits))
         .route("/inspectors", get(handle_inspector_list))
         .route("/inspectors/visible", get(handle_inspector_visible))
         .route("/inspectors/:name", get(handle_inspector_get))
@@ -1729,6 +1732,62 @@ async fn handle_text_spacing_css(
                 ApiError::new("no_text_spacing_matches"),
             )
         })
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct AutoplayAdmitsQuery {
+    pub host: Option<String>,
+    #[serde(default)]
+    pub muted: bool,
+    #[serde(default)]
+    pub user_has_interacted: bool,
+    #[serde(default)]
+    pub high_mei: bool,
+    #[serde(default)]
+    pub tab_backgrounded: bool,
+    pub kind: Option<String>,
+}
+
+async fn handle_autoplay_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.autoplay_list())
+}
+
+async fn handle_autoplay_for(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<HostQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.autoplay_for(&q.host.unwrap_or_default())
+        .map(Json)
+        .ok_or_else(|| {
+            ApiErrorResponse(
+                StatusCode::NOT_FOUND,
+                ApiError::new("no_autoplay_matches"),
+            )
+        })
+}
+
+async fn handle_autoplay_admits(
+    State(svc): State<NamimadoService>,
+    Query(q): Query<AutoplayAdmitsQuery>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    let host = q.host.unwrap_or_default();
+    svc.autoplay_admits(
+        &host,
+        q.muted,
+        q.user_has_interacted,
+        q.high_mei,
+        q.tab_backgrounded,
+        q.kind.as_deref(),
+    )
+    .map(|admit| Json(serde_json::json!({ "admits": admit })))
+    .ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("no_autoplay_matches"),
+        )
+    })
 }
 
 async fn handle_inspector_list(

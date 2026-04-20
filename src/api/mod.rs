@@ -283,6 +283,7 @@ pub struct RulesInventory {
     pub cookie_banners: Vec<String>,
     pub smart_bookmarks: Vec<String>,
     pub text_spacings: Vec<String>,
+    pub autoplays: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
