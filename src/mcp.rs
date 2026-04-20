@@ -855,6 +855,60 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (defpresence) profile.")]
+    async fn presence_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.presence_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved presence profile for a host.")]
+    async fn presence_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.presence_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_presence_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defcrdt-room) profile.")]
+    async fn crdt_room_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.crdt_room_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved CRDT-room profile for a host.")]
+    async fn crdt_room_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.crdt_room_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_crdt_room_matches")),
+        }
+    }
+
+    #[tool(description = "List every (defmultiplayer-cursor) profile.")]
+    async fn multiplayer_cursor_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.multiplayer_cursor_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Resolved multiplayer-cursor profile for a host.")]
+    async fn multiplayer_cursor_for(
+        &self,
+        Parameters(req): Parameters<HostOnlyRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.multiplayer_cursor_for(&req.host) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error("no_multiplayer_cursor_matches")),
+        }
+    }
+
     #[tool(description = "List every (definspector) panel.")]
     async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(

@@ -271,6 +271,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/high-contrast/resolve", "High-contrast profile for `?host=…`."),
         mk("GET", "/simplify", "Every (defsimplify) profile."),
         mk("GET", "/simplify/resolve", "Simplify profile for `?host=…`."),
+        mk("GET", "/presence", "Every (defpresence) profile."),
+        mk("GET", "/presence/resolve", "Presence profile for `?host=…`."),
+        mk("GET", "/crdt-room", "Every (defcrdt-room) profile."),
+        mk("GET", "/crdt-room/resolve", "CRDT-room profile for `?host=…`."),
+        mk("GET", "/multiplayer-cursor", "Every (defmultiplayer-cursor) profile."),
+        mk("GET", "/multiplayer-cursor/resolve", "Multiplayer-cursor profile for `?host=…`."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -396,6 +402,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("high_contrast_for", "High-contrast profile for a host."),
         mk("simplify_list", "Every (defsimplify) profile."),
         mk("simplify_for", "Simplify profile for a host."),
+        mk("presence_list", "Every (defpresence) profile."),
+        mk("presence_for", "Presence profile for a host."),
+        mk("crdt_room_list", "Every (defcrdt-room) profile."),
+        mk("crdt_room_for", "CRDT-room profile for a host."),
+        mk("multiplayer_cursor_list", "Every (defmultiplayer-cursor) profile."),
+        mk("multiplayer_cursor_for", "Multiplayer-cursor profile for a host."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -519,6 +531,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 66, "66 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 69, "69 DSL keywords expected in nami-core");
     }
 }

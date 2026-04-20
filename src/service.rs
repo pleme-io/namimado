@@ -659,6 +659,81 @@ impl NamimadoService {
     #[cfg(not(feature = "browser-core"))]
     pub fn simplify_for(&self, _h: &str) -> Option<serde_json::Value> { None }
 
+    // ── Collaboration pack ───────────────────────────────────────
+
+    #[cfg(feature = "browser-core")]
+    pub fn presence_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .presence_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn presence_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .presence_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn crdt_room_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .crdt_room_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn crdt_room_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .crdt_room_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn multiplayer_cursor_list(&self) -> Vec<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .multiplayer_cursor_list()
+            .into_iter()
+            .filter_map(|s| serde_json::to_value(&s).ok())
+            .collect()
+    }
+
+    #[cfg(feature = "browser-core")]
+    pub fn multiplayer_cursor_for(&self, host: &str) -> Option<serde_json::Value> {
+        let inner = self.inner.lock().expect("service mutex poisoned");
+        inner
+            .pipeline
+            .multiplayer_cursor_for(host)
+            .and_then(|s| serde_json::to_value(&s).ok())
+    }
+
+    #[cfg(not(feature = "browser-core"))]
+    pub fn presence_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn presence_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn crdt_room_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn crdt_room_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn multiplayer_cursor_list(&self) -> Vec<serde_json::Value> { Vec::new() }
+    #[cfg(not(feature = "browser-core"))]
+    pub fn multiplayer_cursor_for(&self, _h: &str) -> Option<serde_json::Value> { None }
+
     // ── Dev pack ─────────────────────────────────────────────────
 
     #[cfg(feature = "browser-core")]
@@ -2663,6 +2738,19 @@ mod tests {
         assert!(svc.inspector_list().is_empty());
         assert!(svc.console_rule_list().is_empty());
         assert!(!svc.profiler_list().is_empty());
+    }
+
+    #[test]
+    fn collab_pack_auto_registers_defaults() {
+        let svc = NamimadoService::new();
+        // All three collaboration registries auto-register a default
+        // profile so inventories are never empty.
+        assert!(!svc.presence_list().is_empty());
+        assert!(!svc.crdt_room_list().is_empty());
+        assert!(!svc.multiplayer_cursor_list().is_empty());
+        assert!(svc.presence_for("example.com").is_some());
+        assert!(svc.crdt_room_for("example.com").is_some());
+        assert!(svc.multiplayer_cursor_for("example.com").is_some());
     }
 
     #[test]

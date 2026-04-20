@@ -63,6 +63,9 @@ use nami_core::passwords::{PasswordsRegistry, PasswordsSpec};
 use nami_core::secure_note::{SecureNoteRegistry, SecureNoteSpec};
 use nami_core::summarize::{SummarizeRegistry, SummarizeSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
+use nami_core::crdt_room::{CrdtRoomRegistry, CrdtRoomSpec};
+use nami_core::multiplayer_cursor::{MultiplayerCursorRegistry, MultiplayerCursorSpec};
+use nami_core::presence::{PresenceRegistry, PresenceSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
 use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
 use nami_core::high_contrast::{HighContrastRegistry, HighContrastSpec};
@@ -237,6 +240,9 @@ pub struct SubstratePipeline {
     reader_alouds: ReaderAloudRegistry,
     high_contrasts: HighContrastRegistry,
     simplifies: SimplifyRegistry,
+    presences: PresenceRegistry,
+    crdt_rooms: CrdtRoomRegistry,
+    multiplayer_cursors: MultiplayerCursorRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -314,6 +320,9 @@ pub struct SubstratePipeline {
     reader_aloud_names: Vec<String>,
     high_contrast_names: Vec<String>,
     simplify_names: Vec<String>,
+    presence_names: Vec<String>,
+    crdt_room_names: Vec<String>,
+    multiplayer_cursor_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -612,6 +621,52 @@ impl SubstratePipeline {
             simplify_specs.iter().map(|s| s.name.clone()).collect();
         let mut simplifies = SimplifyRegistry::new();
         simplifies.extend(simplify_specs);
+
+        // Collaboration pack — presence, CRDT rooms, multiplayer cursors.
+        let presence_specs: Vec<PresenceSpec> =
+            nami_core::presence::compile(&ext_src).unwrap_or_default();
+        let presence_names: Vec<String> = if presence_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            presence_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut presences = PresenceRegistry::new();
+        if presence_specs.is_empty() {
+            presences.insert(PresenceSpec::default_profile());
+        } else {
+            presences.extend(presence_specs);
+        }
+
+        let crdt_room_specs: Vec<CrdtRoomSpec> =
+            nami_core::crdt_room::compile(&ext_src).unwrap_or_default();
+        let crdt_room_names: Vec<String> = if crdt_room_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            crdt_room_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut crdt_rooms = CrdtRoomRegistry::new();
+        if crdt_room_specs.is_empty() {
+            crdt_rooms.insert(CrdtRoomSpec::default_profile());
+        } else {
+            crdt_rooms.extend(crdt_room_specs);
+        }
+
+        let multiplayer_cursor_specs: Vec<MultiplayerCursorSpec> =
+            nami_core::multiplayer_cursor::compile(&ext_src).unwrap_or_default();
+        let multiplayer_cursor_names: Vec<String> = if multiplayer_cursor_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            multiplayer_cursor_specs
+                .iter()
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut multiplayer_cursors = MultiplayerCursorRegistry::new();
+        if multiplayer_cursor_specs.is_empty() {
+            multiplayer_cursors.insert(MultiplayerCursorSpec::default_profile());
+        } else {
+            multiplayer_cursors.extend(multiplayer_cursor_specs);
+        }
 
         // Dev pack — inspector panels, profilers, console rules.
         let inspector_specs: Vec<InspectorSpec> =
@@ -955,7 +1010,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule · {} reader-aloud · {} high-contrast · {} simplify · {} presence · {} crdt-room · {} multiplayer-cursor",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -1021,6 +1076,9 @@ impl SubstratePipeline {
             reader_alouds.len(),
             high_contrasts.len(),
             simplifies.len(),
+            presences.len(),
+            crdt_rooms.len(),
+            multiplayer_cursors.len(),
         );
 
         Self {
@@ -1087,6 +1145,9 @@ impl SubstratePipeline {
             reader_alouds,
             high_contrasts,
             simplifies,
+            presences,
+            crdt_rooms,
+            multiplayer_cursors,
             session_store,
             session_spec,
             wasm_agents,
@@ -1159,6 +1220,9 @@ impl SubstratePipeline {
             reader_aloud_names,
             high_contrast_names,
             simplify_names,
+            presence_names,
+            crdt_room_names,
+            multiplayer_cursor_names,
         }
     }
 
@@ -1192,6 +1256,38 @@ impl SubstratePipeline {
     #[must_use]
     pub fn simplify_for(&self, host: &str) -> Option<SimplifySpec> {
         self.simplifies.resolve(host).cloned()
+    }
+
+    // ── Collaboration pack ───────────────────────────────────────
+
+    #[must_use]
+    pub fn presence_list(&self) -> Vec<PresenceSpec> {
+        self.presences.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn presence_for(&self, host: &str) -> Option<PresenceSpec> {
+        self.presences.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn crdt_room_list(&self) -> Vec<CrdtRoomSpec> {
+        self.crdt_rooms.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn crdt_room_for(&self, host: &str) -> Option<CrdtRoomSpec> {
+        self.crdt_rooms.resolve(host).cloned()
+    }
+
+    #[must_use]
+    pub fn multiplayer_cursor_list(&self) -> Vec<MultiplayerCursorSpec> {
+        self.multiplayer_cursors.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn multiplayer_cursor_for(&self, host: &str) -> Option<MultiplayerCursorSpec> {
+        self.multiplayer_cursors.resolve(host).cloned()
     }
 
     // ── Dev pack ─────────────────────────────────────────────────
@@ -2171,6 +2267,9 @@ impl SubstratePipeline {
             reader_alouds: self.reader_aloud_names.clone(),
             high_contrasts: self.high_contrast_names.clone(),
             simplifies: self.simplify_names.clone(),
+            presences: self.presence_names.clone(),
+            crdt_rooms: self.crdt_room_names.clone(),
+            multiplayer_cursors: self.multiplayer_cursor_names.clone(),
         }
     }
 

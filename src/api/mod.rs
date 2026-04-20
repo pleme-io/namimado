@@ -247,6 +247,9 @@ pub struct RulesInventory {
     pub reader_alouds: Vec<String>,
     pub high_contrasts: Vec<String>,
     pub simplifies: Vec<String>,
+    pub presences: Vec<String>,
+    pub crdt_rooms: Vec<String>,
+    pub multiplayer_cursors: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.
