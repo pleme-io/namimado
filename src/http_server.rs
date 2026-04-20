@@ -72,6 +72,12 @@ pub fn router(service: NamimadoService) -> Router {
         .route("/i18n/:namespace", get(handle_i18n_get))
         .route("/i18n/:namespace/coverage", get(handle_i18n_coverage))
         .route("/security-policy", get(handle_security_policy))
+        .route("/inspectors", get(handle_inspector_list))
+        .route("/inspectors/visible", get(handle_inspector_visible))
+        .route("/inspectors/:name", get(handle_inspector_get))
+        .route("/profilers", get(handle_profiler_list))
+        .route("/profilers/:name", get(handle_profiler_get))
+        .route("/console-rules", get(handle_console_rule_list))
         .route("/media-sessions", get(handle_media_session_list))
         .route("/media-sessions/resolve", get(handle_media_session_for))
         .route("/casts", get(handle_cast_list))
@@ -503,6 +509,54 @@ async fn handle_storage_by_index(
                     .with_detail(format!("{name}/{path}")),
             )
         })
+}
+
+async fn handle_inspector_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.inspector_list())
+}
+
+async fn handle_inspector_visible(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.inspector_visible())
+}
+
+async fn handle_inspector_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.inspector_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("inspector_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_profiler_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.profiler_list())
+}
+
+async fn handle_profiler_get(
+    State(svc): State<NamimadoService>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
+    svc.profiler_get(&name).map(Json).ok_or_else(|| {
+        ApiErrorResponse(
+            StatusCode::NOT_FOUND,
+            ApiError::new("profiler_unknown").with_detail(name),
+        )
+    })
+}
+
+async fn handle_console_rule_list(
+    State(svc): State<NamimadoService>,
+) -> Json<Vec<serde_json::Value>> {
+    Json(svc.console_rule_list())
 }
 
 async fn handle_media_session_list(

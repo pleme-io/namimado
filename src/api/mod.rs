@@ -241,6 +241,9 @@ pub struct RulesInventory {
     pub media_sessions: Vec<String>,
     pub casts: Vec<String>,
     pub subtitles: Vec<String>,
+    pub inspectors: Vec<String>,
+    pub profilers: Vec<String>,
+    pub console_rules: Vec<String>,
 }
 
 /// One entry in the browsing history. Timestamp is Unix seconds.

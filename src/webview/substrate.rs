@@ -64,6 +64,9 @@ use nami_core::secure_note::{SecureNoteRegistry, SecureNoteSpec};
 use nami_core::summarize::{SummarizeRegistry, SummarizeSpec};
 use nami_core::bridge::{BridgeRegistry, BridgeSpec};
 use nami_core::cast::{CastRegistry, CastSpec};
+use nami_core::console_rule::{ConsoleRuleRegistry, ConsoleRuleSpec};
+use nami_core::inspector::{InspectorRegistry, InspectorSpec};
+use nami_core::profiler::{ProfilerRegistry, ProfilerSpec};
 use nami_core::media_session::{MediaSessionRegistry, MediaSessionSpec};
 use nami_core::subtitle::{SubtitleRegistry, SubtitleSpec};
 use nami_core::dns::{DnsRegistry, DnsSpec};
@@ -225,6 +228,9 @@ pub struct SubstratePipeline {
     media_sessions: MediaSessionRegistry,
     casts: CastRegistry,
     subtitles: SubtitleRegistry,
+    inspectors: InspectorRegistry,
+    profilers: ProfilerRegistry,
+    console_rules: ConsoleRuleRegistry,
     session_store: Arc<std::sync::Mutex<SessionStore>>,
     session_spec: SessionSpec,
     wasm_agents: WasmAgentRegistry,
@@ -296,6 +302,9 @@ pub struct SubstratePipeline {
     media_session_names: Vec<String>,
     cast_names: Vec<String>,
     subtitle_names: Vec<String>,
+    inspector_names: Vec<String>,
+    profiler_names: Vec<String>,
+    console_rule_names: Vec<String>,
 }
 
 impl SubstratePipeline {
@@ -572,6 +581,35 @@ impl SubstratePipeline {
             bridge_specs.iter().map(|s| s.name.clone()).collect();
         let mut bridges = BridgeRegistry::new();
         bridges.extend(bridge_specs);
+
+        // Dev pack — inspector panels, profilers, console rules.
+        let inspector_specs: Vec<InspectorSpec> =
+            nami_core::inspector::compile(&ext_src).unwrap_or_default();
+        let inspector_names: Vec<String> =
+            inspector_specs.iter().map(|s| s.name.clone()).collect();
+        let mut inspectors = InspectorRegistry::new();
+        inspectors.extend(inspector_specs);
+
+        let profiler_specs: Vec<ProfilerSpec> =
+            nami_core::profiler::compile(&ext_src).unwrap_or_default();
+        let profiler_names: Vec<String> = if profiler_specs.is_empty() {
+            vec!["default".to_owned()]
+        } else {
+            profiler_specs.iter().map(|s| s.name.clone()).collect()
+        };
+        let mut profilers = ProfilerRegistry::new();
+        if profiler_specs.is_empty() {
+            profilers.insert(ProfilerSpec::default_profile());
+        } else {
+            profilers.extend(profiler_specs);
+        }
+
+        let console_rule_specs: Vec<ConsoleRuleSpec> =
+            nami_core::console_rule::compile(&ext_src).unwrap_or_default();
+        let console_rule_names: Vec<String> =
+            console_rule_specs.iter().map(|s| s.name.clone()).collect();
+        let mut console_rules = ConsoleRuleRegistry::new();
+        console_rules.extend(console_rule_specs);
 
         // Media pack — lock-screen session, cast receivers, subtitles.
         let media_session_specs: Vec<MediaSessionSpec> =
@@ -886,7 +924,7 @@ impl SubstratePipeline {
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
         info!(
-            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle",
+            "substrate loaded: {} state · {} effect · {} predicate · {} plan · {} agent · {} route · {} query · {} derived · {} component · {} transform · {} alias · {} normalize · {} wasm-agent · {} blocker · {} storage · {} extension · {} reader · {} command · {} bind · {} omnibox · {} i18n-bundles · {} security-policy · {} find · {} zoom · {} snapshot · {} pip · {} gesture · {} boost · {} js-runtime · {} space · {} sidebar · {} split · {} spoof · {} dns · {} routing · {} outline · {} annotate · {} feed · {} redirect · {} url-clean · {} script-policy · {} bridge · {} share · {} offline · {} ptr · {} download · {} autofill · {} password-vault · {} auth-saver · {} secure-note · {} passkey · {} llm-provider · {} summarize · {} chat · {} llm-completion · {} media-session · {} cast · {} subtitle · {} inspector · {} profiler · {} console-rule",
             states.len(),
             effects.len(),
             predicates.len(),
@@ -946,6 +984,9 @@ impl SubstratePipeline {
             media_sessions.len(),
             casts.len(),
             subtitles.len(),
+            inspectors.len(),
+            profilers.len(),
+            console_rules.len(),
         );
 
         Self {
@@ -1006,6 +1047,9 @@ impl SubstratePipeline {
             media_sessions,
             casts,
             subtitles,
+            inspectors,
+            profilers,
+            console_rules,
             session_store,
             session_spec,
             wasm_agents,
@@ -1072,7 +1116,42 @@ impl SubstratePipeline {
             media_session_names,
             cast_names,
             subtitle_names,
+            inspector_names,
+            profiler_names,
+            console_rule_names,
         }
+    }
+
+    // ── Dev pack ─────────────────────────────────────────────────
+
+    #[must_use]
+    pub fn inspector_list(&self) -> Vec<InspectorSpec> {
+        self.inspectors.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn inspector_get(&self, name: &str) -> Option<InspectorSpec> {
+        self.inspectors.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn inspector_visible(&self) -> Vec<InspectorSpec> {
+        self.inspectors.visible().into_iter().cloned().collect()
+    }
+
+    #[must_use]
+    pub fn profiler_list(&self) -> Vec<ProfilerSpec> {
+        self.profilers.specs().to_vec()
+    }
+
+    #[must_use]
+    pub fn profiler_get(&self, name: &str) -> Option<ProfilerSpec> {
+        self.profilers.get(name).cloned()
+    }
+
+    #[must_use]
+    pub fn console_rule_list(&self) -> Vec<ConsoleRuleSpec> {
+        self.console_rules.specs().to_vec()
     }
 
     // ── Media pack ───────────────────────────────────────────────
@@ -2014,6 +2093,9 @@ impl SubstratePipeline {
             media_sessions: self.media_session_names.clone(),
             casts: self.cast_names.clone(),
             subtitles: self.subtitle_names.clone(),
+            inspectors: self.inspector_names.clone(),
+            profilers: self.profiler_names.clone(),
+            console_rules: self.console_rule_names.clone(),
         }
     }
 

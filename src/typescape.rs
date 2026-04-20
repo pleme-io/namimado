@@ -259,6 +259,12 @@ fn http_endpoints() -> Vec<HttpEndpointInfo> {
         mk("GET", "/casts/applicable", "Cast profiles applicable to `?host=…`."),
         mk("GET", "/subtitles", "Every (defsubtitle) profile."),
         mk("GET", "/subtitles/resolve", "Subtitle profile for `?host=…`."),
+        mk("GET", "/inspectors", "Every (definspector) panel."),
+        mk("GET", "/inspectors/visible", "Only visible (definspector) panels."),
+        mk("GET", "/inspectors/:name", "Full InspectorSpec for one panel."),
+        mk("GET", "/profilers", "Every (defprofiler) profile."),
+        mk("GET", "/profilers/:name", "Full ProfilerSpec for one profile."),
+        mk("GET", "/console-rules", "Every (defconsole-rule)."),
         mk("GET", "/reader", "Readability-style simplified view of the last navigated page (name=PROFILE selects)."),
         mk("GET", "/extensions", "Installed extension summary."),
         mk("POST", "/extensions", "Install an extension from raw Lisp source."),
@@ -372,6 +378,12 @@ fn mcp_tools() -> Vec<McpToolInfo> {
         mk("cast_applicable", "Cast profiles applicable to a host."),
         mk("subtitle_list", "Every (defsubtitle) profile."),
         mk("subtitle_for", "Subtitle profile for a host."),
+        mk("inspector_list", "Every (definspector) panel."),
+        mk("inspector_visible", "Only visible inspector panels."),
+        mk("inspector_get", "Full InspectorSpec for one panel."),
+        mk("profiler_list", "Every (defprofiler) profile."),
+        mk("profiler_get", "Full ProfilerSpec for one profile."),
+        mk("console_rule_list", "Every (defconsole-rule)."),
         mk("reader", "Readability-style simplified view of the last navigated page."),
         mk("extensions_list", "Installed extension summary."),
         mk("extension_get", "Full ExtensionSpec for one extension."),
@@ -495,6 +507,6 @@ mod tests {
             .get("dsl_keywords")
             .and_then(|v| v.as_array())
             .expect("dsl_keywords array present");
-        assert_eq!(keywords.len(), 60, "60 DSL keywords expected in nami-core");
+        assert_eq!(keywords.len(), 63, "63 DSL keywords expected in nami-core");
     }
 }

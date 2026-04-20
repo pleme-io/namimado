@@ -798,6 +798,62 @@ impl NamimadoMcpServer {
         }
     }
 
+    #[tool(description = "List every (definspector) panel.")]
+    async fn inspector_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.inspector_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Only visible (definspector) panels.")]
+    async fn inspector_visible(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.inspector_visible()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full InspectorSpec for one panel.")]
+    async fn inspector_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.inspector_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "inspector_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "List every (defprofiler) profile.")]
+    async fn profiler_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.profiler_list()).unwrap_or_default(),
+        ))
+    }
+
+    #[tool(description = "Full ProfilerSpec for one profile.")]
+    async fn profiler_get(
+        &self,
+        Parameters(req): Parameters<DownloadNameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.service.profiler_get(&req.name) {
+            Some(v) => Ok(ToolResponse::success(&v)),
+            None => Ok(ToolResponse::error(&format!(
+                "profiler_unknown: {}",
+                req.name
+            ))),
+        }
+    }
+
+    #[tool(description = "List every (defconsole-rule).")]
+    async fn console_rule_list(&self) -> Result<CallToolResult, McpError> {
+        Ok(ToolResponse::success(
+            &serde_json::to_value(&self.service.console_rule_list()).unwrap_or_default(),
+        ))
+    }
+
     #[tool(description = "List every (defmedia-session) profile.")]
     async fn media_session_list(&self) -> Result<CallToolResult, McpError> {
         Ok(ToolResponse::success(
