@@ -26,10 +26,11 @@
         toolName = "namimado";
         src = self;
         repo = "pleme-io/namimado";
-      }
-    // {
-      homeManagerModules.default = import ./module {
-        hmHelpers = import "${substrate}/lib/hm-service-helpers.nix" { lib = nixpkgs.lib; };
+        module = {
+          description = "Namimado (波窓) — desktop web browser with Servo engine + garasu chrome";
+          withMcp = true;
+          withHttp = true;
+          defaultHttpAddr = "127.0.0.1:7860";
+        };
       };
-    };
 }
