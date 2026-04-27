@@ -1140,27 +1140,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
-      "base64-simd" = rec {
-        crateName = "base64-simd";
-        version = "0.7.0";
-        edition = "2021";
-        sha256 = "1mg5ayj5z7imfyv06fhzi5rw289gv5yrfakxzsad22zz786d47bq";
-        libName = "base64_simd";
-        dependencies = [
-          {
-            name = "simd-abstraction";
-            packageId = "simd-abstraction";
-          }
-        ];
-        features = {
-          "alloc" = [ "simd-abstraction/alloc" ];
-          "default" = [ "std" "detect" ];
-          "detect" = [ "simd-abstraction/detect" ];
-          "std" = [ "alloc" "simd-abstraction/std" ];
-          "unstable" = [ "simd-abstraction/unstable" ];
-        };
-        resolvedDefaultFeatures = [ "alloc" "default" "detect" "std" ];
-      };
       "base64ct" = rec {
         crateName = "base64ct";
         version = "1.8.3";
@@ -3311,52 +3290,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "std" ];
       };
-      "crossbeam-deque" = rec {
-        crateName = "crossbeam-deque";
-        version = "0.8.6";
-        edition = "2021";
-        sha256 = "0l9f1saqp1gn5qy0rxvkmz4m6n7fc0b3dbm6q1r5pmgpnyvi3lcx";
-        libName = "crossbeam_deque";
-        dependencies = [
-          {
-            name = "crossbeam-epoch";
-            packageId = "crossbeam-epoch";
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "crossbeam-utils";
-            packageId = "crossbeam-utils";
-            usesDefaultFeatures = false;
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-          "std" = [ "crossbeam-epoch/std" "crossbeam-utils/std" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "crossbeam-epoch" = rec {
-        crateName = "crossbeam-epoch";
-        version = "0.9.18";
-        edition = "2021";
-        sha256 = "03j2np8llwf376m3fxqx859mgp9f83hj1w34153c7a9c7i5ar0jv";
-        libName = "crossbeam_epoch";
-        dependencies = [
-          {
-            name = "crossbeam-utils";
-            packageId = "crossbeam-utils";
-            usesDefaultFeatures = false;
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-          "loom" = [ "loom-crate" "crossbeam-utils/loom" ];
-          "loom-crate" = [ "dep:loom-crate" ];
-          "nightly" = [ "crossbeam-utils/nightly" ];
-          "std" = [ "alloc" "crossbeam-utils/std" ];
-        };
-        resolvedDefaultFeatures = [ "alloc" "std" ];
-      };
       "crossbeam-utils" = rec {
         crateName = "crossbeam-utils";
         version = "0.8.21";
@@ -3367,7 +3300,6 @@ rec {
           "default" = [ "std" ];
           "loom" = [ "dep:loom" ];
         };
-        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "crunchy" = rec {
         crateName = "crunchy";
@@ -3776,44 +3708,6 @@ rec {
         ];
 
       };
-      "dashmap" = rec {
-        crateName = "dashmap";
-        version = "5.5.3";
-        edition = "2018";
-        sha256 = "0miqnlxi501vfbv6mw5jbmzgnj0wjrch3p4abvpd59s9v30lg1wp";
-        authors = [
-          "Acrimon <joel.wejdenstal@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "cfg-if";
-            packageId = "cfg-if";
-          }
-          {
-            name = "hashbrown";
-            packageId = "hashbrown 0.14.5";
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "lock_api";
-            packageId = "lock_api";
-          }
-          {
-            name = "once_cell";
-            packageId = "once_cell";
-          }
-          {
-            name = "parking_lot_core";
-            packageId = "parking_lot_core";
-          }
-        ];
-        features = {
-          "arbitrary" = [ "dep:arbitrary" ];
-          "inline" = [ "hashbrown/inline-more" ];
-          "rayon" = [ "dep:rayon" ];
-          "serde" = [ "dep:serde" ];
-        };
-      };
       "data-encoding" = rec {
         crateName = "data-encoding";
         version = "2.10.0";
@@ -3828,23 +3722,6 @@ rec {
           "std" = [ "alloc" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
-      };
-      "data-url" = rec {
-        crateName = "data-url";
-        version = "0.1.1";
-        edition = "2018";
-        sha256 = "14z15yiyklp5dv0k0q6pd83irrn0y8hj9y3fj17akkrbf37byc1s";
-        libName = "data_url";
-        authors = [
-          "Simon Sapin <simon.sapin@exyr.org>"
-        ];
-        dependencies = [
-          {
-            name = "matches";
-            packageId = "matches";
-          }
-        ];
-
       };
       "der" = rec {
         crateName = "der";
@@ -6143,29 +6020,6 @@ rec {
           "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "ahash" "default" "inline-more" ];
-      };
-      "hashbrown 0.14.5" = rec {
-        crateName = "hashbrown";
-        version = "0.14.5";
-        edition = "2021";
-        sha256 = "1wa1vy1xs3mp11bn3z9dv0jricgr6a2j0zkf1g19yz3vw4il89z5";
-        authors = [
-          "Amanieu d'Antras <amanieu@gmail.com>"
-        ];
-        features = {
-          "ahash" = [ "dep:ahash" ];
-          "alloc" = [ "dep:alloc" ];
-          "allocator-api2" = [ "dep:allocator-api2" ];
-          "compiler_builtins" = [ "dep:compiler_builtins" ];
-          "core" = [ "dep:core" ];
-          "default" = [ "ahash" "inline-more" "allocator-api2" ];
-          "equivalent" = [ "dep:equivalent" ];
-          "nightly" = [ "allocator-api2?/nightly" "bumpalo/allocator_api" ];
-          "rayon" = [ "dep:rayon" ];
-          "rkyv" = [ "dep:rkyv" ];
-          "rustc-dep-of-std" = [ "nightly" "core" "compiler_builtins" "alloc" "rustc-internal-api" ];
-          "serde" = [ "dep:serde" ];
-        };
       };
       "hashbrown 0.15.5" = rec {
         crateName = "hashbrown";
@@ -8924,11 +8778,6 @@ rec {
             packageId = "cssparser-color";
           }
           {
-            name = "dashmap";
-            packageId = "dashmap";
-            optional = true;
-          }
-          {
             name = "data-encoding";
             packageId = "data-encoding";
           }
@@ -8960,35 +8809,12 @@ rec {
             packageId = "parcel_selectors";
           }
           {
-            name = "parcel_sourcemap";
-            packageId = "parcel_sourcemap";
-            optional = true;
-            features = [ "json" ];
-          }
-          {
             name = "pastey";
             packageId = "pastey 0.1.1";
           }
           {
             name = "pathdiff";
             packageId = "pathdiff";
-          }
-          {
-            name = "rayon";
-            packageId = "rayon";
-            optional = true;
-          }
-          {
-            name = "serde";
-            packageId = "serde";
-            optional = true;
-            features = [ "derive" ];
-          }
-          {
-            name = "serde-content";
-            packageId = "serde-content";
-            optional = true;
-            features = [ "serde" ];
           }
           {
             name = "smallvec";
@@ -9018,7 +8844,7 @@ rec {
           "static-self" = [ "dep:static-self" ];
           "substitute_variables" = [ "visitor" "into_owned" ];
         };
-        resolvedDefaultFeatures = [ "bundler" "dashmap" "default" "nodejs" "parcel_sourcemap" "rayon" "sourcemap" "visitor" ];
+        resolvedDefaultFeatures = [ "visitor" ];
       };
       "lightningcss-derive" = rec {
         crateName = "lightningcss-derive";
@@ -9319,14 +9145,6 @@ rec {
         features = {
           "unicode" = [ "regex-automata/unicode" ];
         };
-      };
-      "matches" = rec {
-        crateName = "matches";
-        version = "0.1.10";
-        edition = "2015";
-        sha256 = "1994402fq4viys7pjhzisj4wcw894l53g798kkm2y74laxk0jci5";
-        libPath = "lib.rs";
-
       };
       "matchit" = rec {
         crateName = "matchit";
@@ -9650,9 +9468,9 @@ rec {
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
-          url = "ssh://git@github.com/pleme-io/nami-core";
-          rev = "3e6b6bbdee02763143d84de18f4af0d8c07bddcc";
-          sha256 = "17l09x92i45k6idmarq9r6c2hkaah8p8qh05wyvfzvr1y1ig8qc0";
+          url = "https://github.com/pleme-io/nami-core";
+          rev = "3ca02ffb41cff5d10a435e655e0f3327f7350bb1";
+          sha256 = "1r3yas4h4zfw6zp75nza0wdapvv9kw3ay3zs1pcnl84allnhp68q";
         };
         libName = "nami_core";
         dependencies = [
@@ -9683,6 +9501,7 @@ rec {
           {
             name = "lightningcss";
             packageId = "lightningcss";
+            usesDefaultFeatures = false;
             features = [ "visitor" ];
           }
           {
@@ -12343,13 +12162,6 @@ rec {
           "std" = [ "num-traits/std" ];
         };
       };
-      "outref" = rec {
-        crateName = "outref";
-        version = "0.1.0";
-        edition = "2021";
-        sha256 = "1x61h7dl1cc6cj2f3zsalr8d98v0cw6497sykwxf74wjmqljh8kz";
-
-      };
       "owned_ttf_parser" = rec {
         crateName = "owned_ttf_parser";
         version = "0.25.1";
@@ -12430,54 +12242,6 @@ rec {
           "smallvec" = [ "static-self/smallvec" ];
           "static-self" = [ "dep:static-self" ];
         };
-      };
-      "parcel_sourcemap" = rec {
-        crateName = "parcel_sourcemap";
-        version = "2.1.1";
-        edition = "2018";
-        sha256 = "1fsvw1mlqc5x4psj90jxrdbivq8sqvxi5zz3q2vv4s4047bp8ns8";
-        authors = [
-          "Jasper De Moor <jasperdemoor@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "base64-simd";
-            packageId = "base64-simd";
-            optional = true;
-          }
-          {
-            name = "data-url";
-            packageId = "data-url";
-            optional = true;
-          }
-          {
-            name = "rkyv";
-            packageId = "rkyv";
-          }
-          {
-            name = "serde";
-            packageId = "serde";
-            optional = true;
-            features = [ "derive" ];
-          }
-          {
-            name = "serde_json";
-            packageId = "serde_json";
-            optional = true;
-          }
-          {
-            name = "vlq";
-            packageId = "vlq";
-          }
-        ];
-        features = {
-          "base64-simd" = [ "dep:base64-simd" ];
-          "data-url" = [ "dep:data-url" ];
-          "json" = [ "serde" "serde_json" "base64-simd" "data-url" ];
-          "serde" = [ "dep:serde" ];
-          "serde_json" = [ "dep:serde_json" ];
-        };
-        resolvedDefaultFeatures = [ "base64-simd" "data-url" "json" "serde" "serde_json" ];
       };
       "parking" = rec {
         crateName = "parking";
@@ -14075,47 +13839,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "std" ];
       };
-      "rayon" = rec {
-        crateName = "rayon";
-        version = "1.12.0";
-        edition = "2021";
-        sha256 = "0vcj63xgnk72c30vdrak7dhl53snnaqv9x2faf1d94hzg1kb2fgv";
-        dependencies = [
-          {
-            name = "either";
-            packageId = "either";
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "rayon-core";
-            packageId = "rayon-core";
-          }
-        ];
-        features = {
-          "web_spin_lock" = [ "dep:wasm_sync" "rayon-core/web_spin_lock" ];
-        };
-      };
-      "rayon-core" = rec {
-        crateName = "rayon-core";
-        version = "1.13.0";
-        edition = "2021";
-        links = "rayon-core";
-        sha256 = "14dbr0sq83a6lf1rfjq5xdpk5r6zgzvmzs5j6110vlv2007qpq92";
-        libName = "rayon_core";
-        dependencies = [
-          {
-            name = "crossbeam-deque";
-            packageId = "crossbeam-deque";
-          }
-          {
-            name = "crossbeam-utils";
-            packageId = "crossbeam-utils";
-          }
-        ];
-        features = {
-          "web_spin_lock" = [ "dep:wasm_sync" ];
-        };
-      };
       "read-fonts" = rec {
         crateName = "read-fonts";
         version = "0.35.0";
@@ -15056,7 +14779,7 @@ rec {
           "uuid" = [ "dep:uuid" "bytecheck?/uuid" ];
           "validation" = [ "alloc" "bytecheck" "rend/validation" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "hashbrown" "size_32" "std" ];
+        resolvedDefaultFeatures = [ "alloc" "hashbrown" "size_32" "std" ];
       };
       "rkyv_derive" = rec {
         crateName = "rkyv_derive";
@@ -16524,31 +16247,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "derive" "rc" "serde_derive" "std" ];
       };
-      "serde-content" = rec {
-        crateName = "serde-content";
-        version = "0.1.2";
-        edition = "2021";
-        sha256 = "1ih9np0g2byfkgh12bpgr6457ib3bras6ik11g895yjhyc2cllrp";
-        libName = "serde_content";
-        authors = [
-          "rushmorem <rushmore@surrealdb.com>"
-        ];
-        dependencies = [
-          {
-            name = "serde";
-            packageId = "serde";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "alloc" ];
-          }
-        ];
-        features = {
-          "default" = [ "std" "derive" ];
-          "derive" = [ "serde/derive" ];
-          "serde" = [ "dep:serde" ];
-        };
-        resolvedDefaultFeatures = [ "default" "derive" "serde" "std" ];
-      };
       "serde-value" = rec {
         crateName = "serde-value";
         version = "0.7.0";
@@ -17030,24 +16728,6 @@ rec {
           "std" = [ "alloc" "rand_core?/std" ];
         };
         resolvedDefaultFeatures = [ "alloc" "std" ];
-      };
-      "simd-abstraction" = rec {
-        crateName = "simd-abstraction";
-        version = "0.7.1";
-        edition = "2021";
-        sha256 = "11v9hy8qg0b4qypz2p75ijv41ln1rssk6qilz0gwbbfaayfb5bcw";
-        libName = "simd_abstraction";
-        dependencies = [
-          {
-            name = "outref";
-            packageId = "outref";
-          }
-        ];
-        features = {
-          "detect" = [ "std" ];
-          "std" = [ "alloc" ];
-        };
-        resolvedDefaultFeatures = [ "alloc" "detect" "std" ];
       };
       "simdutf8" = rec {
         crateName = "simdutf8";
@@ -20237,17 +19917,6 @@ rec {
         sha256 = "0nhhi4i5x89gm911azqbn7avs9mdacw2i3vcz3cnmz3mv4rqz4hb";
         authors = [
           "Sergio Benitez <sb@sergio.bz>"
-        ];
-
-      };
-      "vlq" = rec {
-        crateName = "vlq";
-        version = "0.5.1";
-        edition = "2015";
-        sha256 = "1zygijgl47gasi0zx34ak1jq2n4qmk0cx2zpn13shba157npxpb5";
-        authors = [
-          "Tom Tromey <tom@tromey.com>"
-          "Nick Fitzgerald <fitzgen@gmail.com>"
         ];
 
       };
