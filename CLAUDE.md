@@ -1,5 +1,15 @@
 # Namimado (波窓) — Desktop Web Browser
 
+> **★★★ CSE / Knowable Construction.** This repo operates under
+> **Constructive Substrate Engineering** — canonical specification at
+> [`pleme-io/theory/CONSTRUCTIVE-SUBSTRATE-ENGINEERING.md`](https://github.com/pleme-io/theory/blob/main/CONSTRUCTIVE-SUBSTRATE-ENGINEERING.md).
+> The Compounding Directive (operational rules: solve once, load-bearing
+> fixes only, idiom-first, models stay current, direction beats velocity)
+> is in the org-level pleme-io/CLAUDE.md ★★★ section. Read both before
+> non-trivial changes. Desktop browser; embeds Servo for web content and
+> renders chrome via the typed garasu/egaku/irodzuki widget surface,
+> sharing nami-core (DOM/CSS/layout/blocking) with aranami.
+
 A fully programmable desktop web browser. Servo handles web content rendering.
 garasu/egaku/irodzuki render the browser chrome (tabs, address bar, sidebar,
 status bar) as GPU-native widgets. nami-core provides shared browser
